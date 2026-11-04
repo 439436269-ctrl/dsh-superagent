@@ -281,6 +281,15 @@ def start(args):
                     gh_config = str(candidate)
             if gh_config:
                 environment['GH_CONFIG_DIR'] = gh_config
+            # win32 port: the bot's lark-cli keeps its own configuration directory, selected the same way; the agent
+            # then acts as that bot while the operator's own lark-cli configuration stays untouched.
+            lark_config = environment.get('DSH_SUPERAGENT_LARK_CONFIG_DIR')
+            if not lark_config:
+                candidate = Path(os.path.expanduser('~')) / '.lark-cli-dsh-superagent'
+                if (candidate / 'config.json').is_file():
+                    lark_config = str(candidate)
+            if lark_config:
+                environment['LARKSUITE_CLI_CONFIG_DIR'] = lark_config
             with log.open('ab') as out:
                 process = subprocess.Popen(command, cwd=str(ROOT), env=environment, stdout=out, stderr=subprocess.STDOUT,
                                            stdin=subprocess.DEVNULL, creationflags=subprocess.CREATE_NO_WINDOW)
