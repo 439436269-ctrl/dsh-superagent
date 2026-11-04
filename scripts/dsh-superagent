@@ -4,10 +4,13 @@
 `status`, `start`, and `restart` exit 0 while the service runs normally; 1 when it is stopped, duplicated, unreachable, or
 reporting a runtime error, which `restart` may fix; 2 when it runs while a component such as a Source reports an error;
 and 3 when it runs and waits for setup. A restart fixes neither 2 nor 3: they need a person.
+
+win32 port: Windows has no `ps`, `tmux`, `fcntl` or signals between processes. There the service is a detached process
+group with a hidden console recorded in `service.pid`, `stop` asks it to shut down with a generated CTRL_C event, and the
+control lock is a byte-range lock on the same file. Everything else behaves as on POSIX.
 """
 
 import argparse
-import fcntl
 import json
 import os
 from pathlib import Path
@@ -21,10 +24,21 @@ import time
 import urllib.error
 import urllib.request
 
+WINDOWS = os.name == 'nt'
+if WINDOWS:
+    import ctypes
+    import msvcrt
+else:
+    import fcntl
+
 ROOT = Path(__file__).resolve().parent.parent
 ARTIFACTS = ROOT / '.artifacts'
 CONTROL = ARTIFACTS / 'control'
 KEEP_LOGS = 20
+
+STILL_ACTIVE = 259
+PROCESS_QUERY_LIMITED_INFORMATION = 0x1000
+DETACHED_PROCESS = 0x00000008
 
 
 def control(profile):
@@ -54,8 +68,34 @@ def serves(args, profile):
     return matched and 'plugin' not in words
 
 
+def windows_processes():
+    """Yield `(pid, 'node', args)` for the running node processes on Windows, read once through CIM."""
+    script = ('Get-CimInstance Win32_Process -Filter "Name=\'node.exe\'" | '
+              'Select-Object ProcessId,CommandLine | ConvertTo-Json -Compress')
+    try:
+        result = subprocess.run(['powershell', '-NoProfile', '-NonInteractive', '-Command', script],
+                                capture_output=True, text=True, timeout=60)
+    except (OSError, subprocess.SubprocessError):
+        return
+    try:
+        value = json.loads(result.stdout or '[]')
+    except ValueError:
+        return
+    for item in value if isinstance(value, list) else [value]:
+        pid, line = item.get('ProcessId'), item.get('CommandLine') or ''
+        if isinstance(pid, int):
+            yield pid, 'node', line.split()
+
+
 def ps(*options, check=False):
-    """Yield `(pid, comm, args)` tuples from `ps`; arguments are split on whitespace, so paths with spaces become several words and only `--profile` and subcommands are inspected."""
+    """Yield `(pid, comm, args)` tuples; arguments are split on whitespace, so paths with spaces become several words and only `--profile` and subcommands are inspected."""
+    if WINDOWS:
+        # win32 port: CIM lists every node process in one call; `-p` only narrows the result.
+        wanted = options[1] if len(options) == 2 and options[0] == '-p' else None
+        for pid, name, args in windows_processes():
+            if wanted is None or str(pid) == wanted:
+                yield pid, name, args
+        return
     result = subprocess.run(['ps', '-ww', *options, '-o', 'pid=,ucomm=,args='], check=check, capture_output=True, text=True)
     for line in result.stdout.splitlines():
         parts = line.split(None, 2)
@@ -63,8 +103,25 @@ def ps(*options, check=False):
             yield int(parts[0]), parts[1], parts[2].split()
 
 
+def alive(pid):
+    """Return whether `pid` is a running process, without starting another process to ask."""
+    handle = ctypes.windll.kernel32.OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, False, pid)
+    if not handle:
+        return False
+    try:
+        code = ctypes.c_ulong()
+        if not ctypes.windll.kernel32.GetExitCodeProcess(handle, ctypes.byref(code)):
+            return False
+        return code.value == STILL_ACTIVE
+    finally:
+        ctypes.windll.kernel32.CloseHandle(handle)
+
+
 def running(pid, profile):
     """Return whether `pid` is currently running the DSH service for `profile` (`ps -p` returns nothing once exited)."""
+    if WINDOWS:
+        # win32 port: the recorded PID belongs to the service we started, so liveness is enough.
+        return alive(pid)
     return any(found == pid and name in ('node', 'dsh') and serves(args, profile) for found, name, args in ps('-p', str(pid)))
 
 
@@ -129,6 +186,35 @@ def status(args):
     return outcome(pids, current)
 
 
+def interrupt(pid, force):
+    """Ask the service process to shut down; on Windows that means a generated CTRL_C in its own console."""
+    if not WINDOWS:
+        os.kill(pid, signal.SIGINT)
+        return
+    # win32 port: another process cannot send SIGINT on Windows, but a detached helper without a console can attach to
+    # the service's hidden one and raise CTRL_C there. The service handles SIGINT and stops gracefully.
+    helper = (
+        'import ctypes, sys, time\n'
+        'kernel32 = ctypes.windll.kernel32\n'
+        'if not kernel32.AttachConsole(int(sys.argv[1])):\n'
+        '    sys.exit(2)\n'
+        'kernel32.SetConsoleCtrlHandler(None, True)\n'
+        'sent = kernel32.GenerateConsoleCtrlEvent(0, 0)\n'
+        'time.sleep(0.2)\n'
+        'kernel32.FreeConsole()\n'
+        'sys.exit(0 if sent else 3)\n'
+    )
+    result = subprocess.run([sys.executable, '-c', helper, str(pid)],
+                            creationflags=DETACHED_PROCESS, capture_output=True)
+    if result.returncode == 0:
+        return
+    if force:
+        subprocess.run(['taskkill', '/PID', str(pid), '/F'], capture_output=True)
+        return
+    raise RuntimeError('Could not ask the service to stop gracefully; pass --force to terminate it, '
+                       'which may interrupt an Executor Session.')
+
+
 def stop(args, intentional=True):
     """Stop the service gracefully, recording a manual stop marker when `intentional` is True."""
     pids = processes(args.profile)
@@ -138,7 +224,7 @@ def stop(args, intentional=True):
     if intentional:
         (control(args.profile) / 'manually-stopped').write_text(time.strftime('%Y-%m-%dT%H:%M:%S%z') + '\n')
     for pid in pids:
-        os.kill(pid, signal.SIGINT)
+        interrupt(pid, getattr(args, 'force', False))
     deadline = time.monotonic() + args.stop_timeout
     while any(running(pid, args.profile) for pid in pids):
         if time.monotonic() >= deadline:
@@ -156,33 +242,72 @@ def prune_logs(profile):
         path.unlink(missing_ok=True)
 
 
+def dsh_command(profile):
+    """Return the argv of the DSH CLI for `profile` as a detached Windows service would run it."""
+    dsh = shutil.which('dsh')
+    node = shutil.which('node')
+    if not dsh or not node:
+        raise RuntimeError('Both dsh and node must be on PATH.')
+    # The npm shim next to the CLI points at this entry point; spawning node directly keeps the recorded PID the service itself.
+    entry = Path(dsh).parent / 'node_modules' / '@deepseek-ai' / 'dsh' / 'lib' / 'bin.js'
+    if not entry.is_file():
+        raise RuntimeError(f'Cannot find the DSH CLI entry point next to {dsh}.')
+    return [node, str(entry), '--profile', profile, '--no-open']
+
+
 def start(args):
     session = 'dsh-' + args.profile
     pids = processes(args.profile)
     if len(pids) > 1:
         raise RuntimeError('Multiple dsh-superagent processes found; refusing to start another.')
     if not pids:
-        dsh = shutil.which('dsh')
-        if not dsh or not shutil.which('tmux'):
-            raise RuntimeError('Both dsh and tmux must be on PATH.')
-        exists = subprocess.run(['tmux', 'has-session', '-t', '=' + session],
-                                capture_output=True).returncode == 0
-        if state(args.url) is not None:
-            raise RuntimeError('An existing orchestrator answers at this URL; refusing duplicate startup.')
-        stamp = time.strftime('%Y%m%d-%H%M%S')
-        log = ARTIFACTS / f'dsh-superagent-{args.profile}-{stamp}-{os.getpid()}.log'
-        log.touch()
-        prune_logs(args.profile)
-        # `exec` replaces the shell so the pane PID printed by tmux is the DSH service process itself.
-        command = ('umask 077; exec ' + shlex.join([dsh, '--profile', args.profile, '--no-open'])
-                   + ' >> ' + shlex.quote(str(log)) + ' 2>&1')
-        # Reuse an existing tmux session without disturbing other windows.
-        target = ['new-window', '-t', '=' + session + ':'] if exists else ['new-session', '-s', session]
-        pane = subprocess.run(['tmux', *target, '-d', '-P', '-F', '#{pane_pid}', '-n', 'server', '-c', str(ROOT), command],
-                              check=True, capture_output=True, text=True).stdout.strip()
-        if pane.isdigit():
-            (control(args.profile) / 'service.pid').write_text(pane + '\n')
-        print('Log: ' + str(log), flush=True)
+        if WINDOWS:
+            command = dsh_command(args.profile)
+            if state(args.url) is not None:
+                raise RuntimeError('An existing orchestrator answers at this URL; refusing duplicate startup.')
+            stamp = time.strftime('%Y%m%d-%H%M%S')
+            log = ARTIFACTS / f'dsh-superagent-{args.profile}-{stamp}-{os.getpid()}.log'
+            log.touch()
+            prune_logs(args.profile)
+            # A hidden console of its own lets `stop` raise CTRL_C over a graceful SIGINT handler. CTRL_C stays enabled
+            # because the process is not given a new process group, which would disable it.
+            # win32 port: the agent's GitHub CLI is the real `gh.exe` (a batch wrapper loses its arguments), so the
+            # account it acts as is chosen here, by the configuration directory gh reads.
+            environment = dict(os.environ)
+            gh_config = environment.get('DSH_SUPERAGENT_GH_CONFIG_DIR')
+            if not gh_config:
+                candidate = Path(os.path.expanduser('~')) / '.config' / 'gh-agent'
+                if (candidate / 'hosts.yml').is_file():
+                    gh_config = str(candidate)
+            if gh_config:
+                environment['GH_CONFIG_DIR'] = gh_config
+            with log.open('ab') as out:
+                process = subprocess.Popen(command, cwd=str(ROOT), env=environment, stdout=out, stderr=subprocess.STDOUT,
+                                           stdin=subprocess.DEVNULL, creationflags=subprocess.CREATE_NO_WINDOW)
+            (control(args.profile) / 'service.pid').write_text(f'{process.pid}\n')
+            print('Log: ' + str(log), flush=True)
+        else:
+            dsh = shutil.which('dsh')
+            if not dsh or not shutil.which('tmux'):
+                raise RuntimeError('Both dsh and tmux must be on PATH.')
+            exists = subprocess.run(['tmux', 'has-session', '-t', '=' + session],
+                                    capture_output=True).returncode == 0
+            if state(args.url) is not None:
+                raise RuntimeError('An existing orchestrator answers at this URL; refusing duplicate startup.')
+            stamp = time.strftime('%Y%m%d-%H%M%S')
+            log = ARTIFACTS / f'dsh-superagent-{args.profile}-{stamp}-{os.getpid()}.log'
+            log.touch()
+            prune_logs(args.profile)
+            # `exec` replaces the shell so the pane PID printed by tmux is the DSH service process itself.
+            command = ('umask 077; exec ' + shlex.join([dsh, '--profile', args.profile, '--no-open'])
+                       + ' >> ' + shlex.quote(str(log)) + ' 2>&1')
+            # Reuse an existing tmux session without disturbing other windows.
+            target = ['new-window', '-t', '=' + session + ':'] if exists else ['new-session', '-s', session]
+            pane = subprocess.run(['tmux', *target, '-d', '-P', '-F', '#{pane_pid}', '-n', 'server', '-c', str(ROOT), command],
+                                  check=True, capture_output=True, text=True).stdout.strip()
+            if pane.isdigit():
+                (control(args.profile) / 'service.pid').write_text(pane + '\n')
+            print('Log: ' + str(log), flush=True)
     else:
         (control(args.profile) / 'service.pid').write_text(f'{pids[0]}\n')
         print(f'dsh-superagent already running (PID {pids[0]}); no duplicate started.', flush=True)
@@ -206,6 +331,20 @@ def start(args):
     raise RuntimeError('Startup health check timed out; inspect the log. Any running process was left intact.')
 
 
+def lock(file):
+    """Take the exclusive control lock, or raise when another control operation holds it."""
+    if WINDOWS:
+        try:
+            msvcrt.locking(file.fileno(), msvcrt.LK_NBLCK, 1)
+        except OSError:
+            raise RuntimeError('Another dsh-superagent control operation is in progress.') from None
+        return
+    try:
+        fcntl.flock(file, fcntl.LOCK_EX | fcntl.LOCK_NB)
+    except BlockingIOError:
+        raise RuntimeError('Another dsh-superagent control operation is in progress.') from None
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('action', choices=['start', 'stop', 'restart', 'status'])
@@ -218,17 +357,17 @@ def main():
                         help='Graceful shutdown timeout in seconds; running Executor Sessions finish their step first.')
     parser.add_argument('--respect-stop', action='store_true',
                         help='For monitoring: never start/restart after an intentional stop.')
+    parser.add_argument('--force', action='store_true',
+                        help='win32 port: terminate the process when a graceful stop cannot be requested.')
     args = parser.parse_args()
     if args.timeout <= 0 or args.stop_timeout <= 0:
         parser.error('--timeout and --stop-timeout must be positive')
     if not re.fullmatch(r'[A-Za-z0-9_][A-Za-z0-9_.-]*', args.profile):
         parser.error('--profile must be a DSH profile name')
-    os.umask(0o077)
-    with (control(args.profile) / 'operation.lock').open('a') as lock:
-        try:
-            fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
-        except BlockingIOError:
-            raise RuntimeError('Another dsh-superagent control operation is in progress.') from None
+    if not WINDOWS:
+        os.umask(0o077)
+    with (control(args.profile) / 'operation.lock').open('a') as handle:
+        lock(handle)
         if args.respect_stop and args.action in ('start', 'restart') and stopped(args.profile):
             print('Intentional stop is active; automatic recovery skipped.')
             return 0
