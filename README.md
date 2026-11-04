@@ -30,6 +30,13 @@ Read the numbered documents in order; each builds only on the ones before it.
 - [007 Architecture](docs/007-architecture.md)
 - [008 Cookbook](docs/008-cookbook.md): adding a Source
 - [009 IM bridge](docs/009-im-bridge.md): reaching another chat tool through a bridge adapter
+- [010 Session bus](docs/010-session-bus.md): reading other Sessions, and handing work to other agents
+
+## Supervise other Sessions
+
+The main Session can list, read and search the Sessions on this machine (`orchestrator_session_*`) and hand work to an
+installed agent such as Codex or Claude Code (`orchestrator_agent_*`). Transcripts are read where the format is public;
+any other agent is used through its non-interactive command. See [010 Session bus](docs/010-session-bus.md).
 
 ## Add a chat tool
 
