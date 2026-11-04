@@ -29,6 +29,13 @@ Read the numbered documents in order; each builds only on the ones before it.
 - [006 Deployment](docs/006-deployment.md): manual setup, configuration, upgrades and troubleshooting
 - [007 Architecture](docs/007-architecture.md)
 - [008 Cookbook](docs/008-cookbook.md): adding a Source
+- [009 IM bridge](docs/009-im-bridge.md): reaching another chat tool through a bridge adapter
+
+## Add a chat tool
+
+The **IM bridge** Source reaches any chat tool without touching the core: write one process that speaks the JSON-lines
+protocol in [009 IM bridge](docs/009-im-bridge.md), start from `examples/im-bridges/template.mjs`, and point the Source at
+it. `examples/im-bridges/telegram.mjs` is a complete adapter with no dependencies.
 
 ## Development
 
