@@ -4,20 +4,52 @@
  * Provides default-path guardrails rather than an OS-level security boundary, as workers run under the operator's OS user.
  */
 import { lstat, mkdir, readdir, readFile, rename, unlink, writeFile } from 'node:fs/promises'
-import { realpathSync } from 'node:fs'
-import { delimiter, join, resolve } from 'node:path'
+import { realpathSync, statSync } from 'node:fs'
+import { delimiter, dirname, join, resolve } from 'node:path'
 import type { SubprocessOutputReader, SubprocessRuntime } from '@deepseek-ai/dsh-subprocess'
 import type { Deployment } from '../deployment.ts'
 import { SetupError } from '../setup.ts'
 import { CliError } from './commands.ts'
 
 const MARKER = '# Written by dsh-superagent on every start; edits are lost.'
+/** The marker without its comment prefix, so a shim written in another syntax (`//`, `@REM`, a JSON string) still counts as ours. */
+const MARKER_TEXT = MARKER.slice(2)
 /** Markers of files written under the project's earlier names (`dsh-tag`, `dsh-go`, `dsh-freelancer`), which `dsh-superagent` owns and replaces too. */
 const LEGACY_MARKERS = ['dsh-tag', 'dsh-go', 'dsh-freelancer'].map(name => `# Written by ${name} on every start; edits are lost.`)
 /** Commands workers need, which `blockedCommands` cannot block: the shims and git. */
 export const WORKER_COMMANDS: readonly string[] = ['gh', 'git', 'lark-cli']
 export const workerBin = (stateDir: string): string => join(stateDir, 'worker-bin')
 export const workerGitConfig = (stateDir: string): string => join(stateDir, 'worker-gitconfig')
+/** win32 port: the single helper every Windows shim calls; it strips the shim directory from PATH and runs the real CLI. */
+export const SHIM_HELPER = 'shim.cjs'
+export const SHIM_HELPER_BODY = `// ${MARKER_TEXT}
+'use strict'
+const { readFileSync } = require('node:fs')
+const { spawnSync } = require('node:child_process')
+const { dirname } = require('node:path')
+
+const configFile = process.argv[2]
+const config = JSON.parse(readFileSync(configFile, 'utf8'))
+const forwarded = process.argv.slice(3)
+if (config.fail) { process.stderr.write(config.fail + '\\n'); process.exit(1) }
+
+// Strip the shim directory from PATH so the wrapper resolves the real binary rather than this shim again.
+const here = dirname(configFile).replace(/[\\\\/]+$/, '').toLowerCase()
+const entries = (process.env.PATH ?? process.env.Path ?? '').split(';')
+  .filter(entry => entry && entry.replace(/[\\\\/]+$/, '').toLowerCase() !== here)
+const env = { ...process.env, PATH: entries.join(';') }
+if (process.env.Path !== undefined) env.Path = env.PATH
+
+// A batch file has to go through cmd.exe; anything else is spawned with its argument vector intact.
+const argv = [config.argv[0], ...config.argv.slice(1), ...forwarded]
+const quote = value => /[\\s"&|<>^()]/.test(value)
+  ? '"' + value.replace(/(\\\\+)"/g, '$1$1\\\\"').replace(/(\\\\+)$/, '$1$1') + '"'
+  : value
+const result = /\\.(cmd|bat)$/i.test(argv[0])
+  ? spawnSync(process.env.ComSpec ?? 'cmd.exe', ['/d', '/s', '/c', argv.map(quote).join(' ')], { stdio: 'inherit', env })
+  : spawnSync(argv[0], argv.slice(1), { stdio: 'inherit', env })
+process.exit(result.status ?? (result.error ? 1 : 0))
+`
 const shellQuote = (value: string): string => `'${value.replaceAll("'", "'\\''")}'`
 const gitQuote = (value: string): string => `"${value.replace(/[\\"]/g, char => `\\${char}`)}"`
 export const credentialHelper = (cli: string): string => `!${shellQuote(cli)} auth git-credential`
@@ -61,7 +93,9 @@ export function agentVariables(stateDir: string): Record<string, string | undefi
 async function written(file: string): Promise<boolean> {
   if (!(await lstat(file)).isFile()) return false
   const head = (await readFile(file, 'utf8')).split('\n', 2)
-  return [MARKER, ...LEGACY_MARKERS].some(marker => head.includes(marker))
+  // win32 port: the marker is matched anywhere in either of the first two lines, because a Windows shim is a `.cmd`, a
+  // `.json` or a `.cjs` file, none of which can carry it as a whole `#` comment line.
+  return [MARKER_TEXT, ...LEGACY_MARKERS.map(marker => marker.slice(2))].some(marker => head.some(line => line.includes(marker)))
 }
 async function own(file: string, text: string, mode = 0o644): Promise<void> {
   let foreign = false
@@ -84,12 +118,14 @@ export async function writeEnvironment(deployment: Pick<Deployment, 'stateDir' |
   for (const name of before) { const file = join(dir, name); if (!await written(file)) throw new SetupError('foreignFile', { file }) }
   // Workers may be running concurrently: write each shim to a temp file and atomically rename it so no command ever resolves past the shim directory.
   const kept = new Set<string>()
-  const shim = async (name: string, body: string): Promise<void> => {
+  const raw = async (name: string, text: string, mode = 0o755): Promise<void> => {
     const temporary = join(dir, `.${name}.${process.pid}.tmp`)
-    await writeFile(temporary, `#!/bin/sh\n${MARKER}\n${body}\n`, { mode: 0o755 })
+    await writeFile(temporary, text, { mode })
     await rename(temporary, join(dir, name))
     kept.add(name)
   }
+  const blocked = [...new Set(blockedCommands.filter(name => !WORKER_COMMANDS.includes(name)))]
+  const shim = async (name: string, body: string): Promise<void> => raw(name, `#!/bin/sh\n${MARKER}\n${body}\n`)
   const withoutShims = [
     `self=${shellQuote(dir)}`, 'rest=', 'IFS=:', 'set -f',
     'for entry in $PATH; do [ "$entry" = "$self" ] || rest="${rest:+$rest:}$entry"; done',
@@ -97,10 +133,22 @@ export async function writeEnvironment(deployment: Pick<Deployment, 'stateDir' |
   ].join('\n')
   const run = (program: string): string => `${withoutShims}\nexec ${shellQuote(program)} "$@"`
   const fail = (message: string): string => `echo ${shellQuote(message)} >&2\nexit 1`
-  await shim('gh', run(github.cli))
-  await shim('lark-cli', feishu ? run(feishu.cli) : fail('lark-cli is unavailable: this installation has no Feishu bot.'))
-  for (const name of new Set(blockedCommands.filter(name => !WORKER_COMMANDS.includes(name)))) {
-    await shim(name, fail(`${name} is blocked in this installation; use gh, which acts as ${github.login}.`))
+  if (process.platform === 'win32') {
+    // win32 port: Windows executes neither a POSIX shim nor a file without an extension, so each command becomes a
+    // `<name>.cmd` that hands its arguments to one shared Node helper, plus a JSON file naming what to run.
+    await raw(SHIM_HELPER, SHIM_HELPER_BODY)
+    const install = async (name: string, config: { argv?: string[]; fail?: string }): Promise<void> => {
+      await raw(`${name}.shim.json`, JSON.stringify({ marker: MARKER_TEXT, ...config }))
+      await raw(`${name}.cmd`, ['@echo off', `@REM ${MARKER_TEXT}`, `"${process.execPath}" "%~dp0${SHIM_HELPER}" "%~dp0${name}.shim.json" %*`, ''].join('\r\n'))
+    }
+    await install('gh', { argv: [github.cli] })
+    await install('lark-cli', feishu ? { argv: [feishu.cli] } : { fail: 'lark-cli is unavailable: this installation has no Feishu bot.' })
+    // The credential helper is a `!` command, which git runs through the POSIX shell Git for Windows ships.
+    for (const name of blocked) await install(name, { fail: `${name} is blocked in this installation; use gh, which acts as ${github.login}.` })
+  } else {
+    await shim('gh', run(github.cli))
+    await shim('lark-cli', feishu ? run(feishu.cli) : fail('lark-cli is unavailable: this installation has no Feishu bot.'))
+    for (const name of blocked) await shim(name, fail(`${name} is blocked in this installation; use gh, which acts as ${github.login}.`))
   }
   for (const name of before) if (!kept.has(name)) await unlink(join(dir, name))
   await own(workerGitConfig(stateDir), [
@@ -124,8 +172,51 @@ export function applyEnvironment(variables: Record<string, string | undefined>, 
   return () => { apply(previous) }
 }
 
+/**
+ * win32 port: the prepare command runs in `sh`, and Windows has none on PATH. Git for Windows ships one, so it is looked
+ * up next to `git.exe` when neither `sh` nor `bash` is on PATH.
+ */
+export function prepareShell(): string[] {
+  if (process.platform !== 'win32') return ['sh', '-c']
+  const explicit = process.env.DSH_SUPERAGENT_SHELL
+  if (explicit) return [explicit, '-c']
+  const extensions = (process.env.PATHEXT ?? '.COM;.EXE;.BAT;.CMD').split(';').filter(Boolean)
+  const directories = (process.env.PATH ?? '').split(delimiter).filter(Boolean)
+  const find = (name: string): string | undefined => {
+    for (const directory of directories) {
+      for (const extension of extensions) {
+        const candidate = join(directory, name + extension.toLowerCase())
+        try { if (statSync(candidate).isFile()) return candidate } catch { /* Not here. */ }
+      }
+    }
+    return undefined
+  }
+  for (const name of ['sh', 'bash']) { const found = find(name); if (found) return [found, '-c'] }
+  const git = find('git')
+  if (git) {
+    // `<root>\cmd\git.exe` and `<root>\usr\bin\sh.exe` share the root.
+    const bundled = join(dirname(dirname(git)), 'usr', 'bin', 'sh.exe')
+    try { if (statSync(bundled).isFile()) return [bundled, '-c'] } catch { /* No bundled sh. */ }
+  }
+  throw new Error('A prepare command needs sh; install Git for Windows or set DSH_SUPERAGENT_SHELL to a shell.')
+}
+
+/**
+ * Windows cannot start a `.cmd` or `.bat` without `cmd.exe`, and `cmd.exe` re-parses a command line that Node has
+ * already quoted, which splits arguments containing spaces. A CLI configured as a batch file is refused with this
+ * message instead of silently losing arguments; point the setting at the `.exe` and select the account with an
+ * environment variable such as `GH_CONFIG_DIR`.
+ */
+export function assertSpawnable(argv: string[]): void {
+  const command = argv[0] ?? ''
+  if (process.platform === 'win32' && /\.(cmd|bat)$/i.test(command)) {
+    throw new Error(`${command} is a batch file, which Windows cannot start without cmd.exe losing its arguments; configure the .exe instead`)
+  }
+}
+
 /** Spawns a command through the DSH subprocess runtime, which strips credential-shaped environment variables. */
 export async function runAsWorker(subprocess: SubprocessRuntime, argv: string[], cwd: string, signal: AbortSignal, env?: Record<string, string>): Promise<string> {
+  assertSpawnable(argv)
   const handle = subprocess.spawn({ argv, cwd, graceMs: 2000, signal, ...env ? { env } : {}, stdio: { stdin: 'ignore', stdout: { maxBytes: 1 << 20 }, stderr: { maxBytes: 1 << 16 } } })
   const { exitCode } = await handle.done
   const read = (reader: SubprocessOutputReader | undefined): string => reader?.readFrom(0).text ?? ''
