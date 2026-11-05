@@ -22,6 +22,9 @@ export async function apply(ctx: Context, config: DeploymentConfig): Promise<voi
   ctx.effect(() => async () => { await runtime.stop() })
   await runtime.ready
   ctx.logger.info(runtime.configured() ? 'dsh-superagent ready; the Superagent sidebar entry opens the management panel' : `dsh-superagent is waiting for setup: ${runtime.setupProblem?.detail ?? ''}`)
+  // Reports whether the supervision tools can act on live Sessions, so an absent Host service is visible rather than a
+  // surprise the first time the main Session tries to message one.
+  ctx.logger.info('session bus: live Session control %s', (ctx as { sessionController?: unknown }).sessionController ? 'available' : 'absent')
 }
 export type { Deployment, DeploymentConfig } from './deployment.ts'
 export * from './core/index.ts'
