@@ -89,3 +89,30 @@ describe('CliRunners', () => {
     expect(runners.status(run.id)!.state).toBe('stopped')
   })
 })
+
+describe('DshSessions', () => {
+  it('lists only conversations newest first, and routes message and stop to the Host service', async () => {
+    const calls: { kind: string; body: unknown }[] = []
+    const control = {
+      list: async () => ({ items: [
+        { sessionId: 'older', running: false, blank: false, agentAvailable: false, updatedAt: 1 },
+        { sessionId: 'newer', running: true, blank: false, agentAvailable: true, updatedAt: 3 },
+        { sessionId: 'blank', running: false, blank: true, agentAvailable: false, updatedAt: 2 },
+      ] }),
+      prompt: async (body: unknown) => { calls.push({ kind: 'prompt', body }); return { accepted: true as const } },
+      cancel: (body: unknown) => { calls.push({ kind: 'cancel', body }); return { accepted: true as const } },
+    }
+    const bus = new SessionBus({ stateDir: mkdtempSync(join(tmpdir(), 'session-bus-state-')), control })
+    const signal = new AbortController().signal
+    expect((await bus.dsh!.live(signal)).map(item => item.sessionId)).toEqual(['newer', 'older'])
+    await bus.dsh!.message('older', 'hello there', signal)
+    bus.dsh!.stop('newer')
+    expect(calls.map(call => call.kind)).toEqual(['prompt', 'cancel'])
+    const prompt = calls[0]!.body as { sessionId: string; mode: string; content: { text: string }[] }
+    expect(prompt.sessionId).toBe('older')
+    expect(prompt.mode).toBe('queue')
+    expect(prompt.content[0]!.text).toBe('hello there')
+    expect(calls[1]!.body).toEqual({ sessionId: 'newer' })
+    await expect(bus.dsh!.message('older', '   ', signal)).rejects.toThrow(/needs text/)
+  })
+})

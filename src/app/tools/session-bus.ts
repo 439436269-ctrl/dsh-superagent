@@ -46,6 +46,37 @@ export function sessionBusTools(bus: SessionBus): Tool[] {
       execute: async args => ({ hits: (await bus.searchSessions(args)).map(hit => ({ agent: hit.ref.agent, id: hit.ref.id, title: hit.ref.title, lastAt: hit.ref.lastAt, role: hit.turn.role, text: hit.turn.text })) }),
     }),
     tool({
+      name: 'orchestrator_session_live',
+      description: 'List the Host Sessions that carry a conversation, newest first, with whether each is working right now. Use it to find a Session to read, message or stop; orchestrator_session_list reads transcripts off disk and also covers other profiles.',
+      schema: z.object({}).strict(),
+      execute: async (_args, signal) => {
+        if (!bus.dsh) throw new Error('This Host exposes no Session service')
+        return { sessions: (await bus.dsh.live(signal)).map(item => ({ session_id: item.sessionId, running: item.running, live_agent: item.agentAvailable, cwd: item.cwd ?? '', updated_at: new Date(item.updatedAt).toISOString(), ...item.parentSessionId ? { parent: item.parentSessionId } : {} })) }
+      },
+    }),
+    tool({
+      name: 'orchestrator_session_message',
+      description: 'Send one message into another Session, exactly as its own user would type it: it joins that conversation and can change that Session\'s work. Use it to hand a Session context, answer its question, or steer it. It grants no authority by itself: the receiving Session still applies its own policy.',
+      schema: z.object({
+        session_id: z.string().min(1).describe('The Session id from orchestrator_session_live.'),
+        text: z.string().trim().min(1).max(8000).describe('The message. It is read by that Session\'s agent, not by a person.'),
+      }).strict(),
+      execute: async (args, signal) => {
+        if (!bus.dsh) throw new Error('This Host exposes no Session service')
+        const result = await bus.dsh.message(args.session_id, args.text, signal)
+        return { accepted: result.accepted, session_id: args.session_id, note: 'Queued in that Session; read it there with orchestrator_session_list / orchestrator_session_read.' }
+      },
+    }),
+    tool({
+      name: 'orchestrator_session_stop',
+      description: 'Stop what another Session is doing now, leaving its conversation intact. Use it when a Session is stuck or working on something a person cancelled; do not use it to interrupt a Session whose work is still wanted.',
+      schema: z.object({ session_id: z.string().min(1) }).strict(),
+      execute: async args => {
+        if (!bus.dsh) throw new Error('This Host exposes no Session service')
+        return { ...bus.dsh.stop(args.session_id), session_id: args.session_id }
+      },
+    }),
+    tool({
       name: 'orchestrator_agent_list',
       description: 'List the agents this machine can hand work to, which are the ones whose non-interactive command is installed. An agent that is not listed cannot be dispatched to.',
       schema: z.object({}).strict(),

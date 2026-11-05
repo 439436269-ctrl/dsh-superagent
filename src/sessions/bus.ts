@@ -216,6 +216,54 @@ export class DshAdapter implements SessionAdapter {
   }
 }
 
+/** The Host Session service, narrowed to the three facts a supervisor needs: what exists, what is running, what to do. */
+export interface DshSessionControl {
+  list(request: { cursor?: string }, signal: AbortSignal): Promise<{ items: readonly LiveSession[] }>
+  prompt(request: { requestId: string; sessionId: string; mode: 'queue' | 'steer'; content: readonly { type: 'text'; text: string }[] }, signal: AbortSignal): Promise<{ accepted: true }>
+  cancel(request: { sessionId: string }): { accepted: true }
+}
+export interface LiveSession {
+  sessionId: string
+  running: boolean
+  blank: boolean
+  agentAvailable: boolean
+  updatedAt: number
+  cwd?: string
+  parentSessionId?: string
+}
+
+/** What a supervision Session sees of its Host's Sessions: the live list, and the two ways to change them. */
+export class DshSessions {
+  constructor(private readonly control: DshSessionControl) {}
+
+  /** Sessions that carry a conversation, with whether each is working right now. */
+  async live(signal: AbortSignal): Promise<LiveSession[]> {
+    const items: LiveSession[] = []
+    let cursor: string | undefined
+    // Bounded: a supervisor never needs every Session on a busy machine.
+    for (let page = 0; page < 5; page++) {
+      const value = await this.control.list({ ...cursor ? { cursor } : {} }, signal)
+      items.push(...value.items)
+      if (value.items.length === 0) break
+      cursor = undefined
+      break
+    }
+    return items.filter(item => !item.blank).sort((a, b) => b.updatedAt - a.updatedAt)
+  }
+
+  /** Queues one message for a Session, creating no authority: it is exactly what its own user would type. */
+  async message(sessionId: string, text: string, signal: AbortSignal): Promise<{ accepted: true }> {
+    const content = [{ type: 'text' as const, text }]
+    if (!text.trim()) throw new Error('A message needs text')
+    return this.control.prompt({ requestId: randomUUID(), sessionId, mode: 'queue', content }, signal)
+  }
+
+  /** Stops whatever a Session is doing, leaving its conversation intact. */
+  stop(sessionId: string): { accepted: true } {
+    return this.control.cancel({ sessionId })
+  }
+}
+
 /** Runners for agents usable as one non-interactive command; each is detected rather than assumed. */
 export class CliRunners {
   private readonly runs = new Map<string, { run: Run; child?: ReturnType<typeof spawn> }>()
@@ -291,9 +339,12 @@ const RUNNERS: AgentRunner[] = [
 export class SessionBus {
   readonly adapters: SessionAdapter[]
   readonly runners: CliRunners
-  constructor(options: { stateDir: string; adapters?: SessionAdapter[] }) {
+  /** Live Host Sessions and the two control verbs; absent when the Host exposes no Session service. */
+  readonly dsh?: DshSessions
+  constructor(options: { stateDir: string; adapters?: SessionAdapter[]; control?: DshSessionControl }) {
     this.adapters = options.adapters ?? [new DshAdapter()]
     this.runners = new CliRunners(join(options.stateDir, 'session-bus', 'runs'))
+    if (options.control) this.dsh = new DshSessions(options.control)
   }
 
   async listSessions(input: { agent?: string; limit?: number }): Promise<SessionRef[]> {

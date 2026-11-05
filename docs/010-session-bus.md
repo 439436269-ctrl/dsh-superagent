@@ -32,6 +32,14 @@ This builds on [001 Domain model](001-domain.md) through [009 IM bridge](009-im-
 | `orchestrator_agent_list` | Which agents this machine can hand work to, detected rather than assumed |
 | `orchestrator_agent_dispatch` | Hand one self-contained task to an agent; returns a run id |
 | `orchestrator_agent_status` | The state, exit code and output tail of one run |
+| `orchestrator_session_live` | Which Host Sessions exist right now, and whether each is working |
+| `orchestrator_session_message` | Send one message into another Session, as its own user would |
+| `orchestrator_session_stop` | Stop what another Session is doing, leaving its conversation |
+
+The three `session_*` tools above the last group read transcripts off disk and therefore reach every profile; the three at
+the end act on the live Host through its Session service, so they need one (`SessionController` absent means those tools
+refuse rather than lie). A message is ordinary input: it joins that Session's conversation and grants no authority. A stop
+cancels the turn, not the Session.
 
 A dispatch returns immediately. The supervisor polls, so it can keep routing while another agent works, and a busy agent
 never blocks the Session that owns the tickets.
