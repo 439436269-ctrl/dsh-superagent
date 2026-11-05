@@ -242,6 +242,29 @@ def prune_logs(profile):
         path.unlink(missing_ok=True)
 
 
+def service_environment():
+    """The service's environment: the operator's own, plus KEY=VALUE pairs from `~/.dsh-superagent.env`.
+
+    The file carries machine facts the agent's egress depends on, such as an `HTTPS_PROXY` the worker's git and gh must
+    honour. It is read at every start, so a change needs `restart`, not an edit to this script.
+    """
+    environment = dict(os.environ)
+    path = Path(os.path.expanduser('~')) / '.dsh-superagent.env'
+    try:
+        lines = path.read_text(encoding='utf-8').splitlines()
+    except OSError:
+        return environment
+    for line in lines:
+        line = line.strip()
+        if not line or line.startswith('#') or '=' not in line:
+            continue
+        key, _, value = line.partition('=')
+        key = key.strip()
+        if key:
+            environment[key] = value.strip().strip('"').strip("'")
+    return environment
+
+
 def dsh_command(profile):
     """Return the argv of the DSH CLI for `profile` as a detached Windows service would run it."""
     dsh = shutil.which('dsh')
@@ -273,7 +296,7 @@ def start(args):
             # because the process is not given a new process group, which would disable it.
             # win32 port: the agent's GitHub CLI is the real `gh.exe` (a batch wrapper loses its arguments), so the
             # account it acts as is chosen here, by the configuration directory gh reads.
-            environment = dict(os.environ)
+            environment = service_environment()
             gh_config = environment.get('DSH_SUPERAGENT_GH_CONFIG_DIR')
             if not gh_config:
                 candidate = Path(os.path.expanduser('~')) / '.config' / 'gh-agent'
