@@ -13,6 +13,7 @@
  * and a dispatch is a recorded run with a timeout, so a supervisor never holds a whole transcript or a hung agent.
  */
 import { spawn } from 'node:child_process'
+import { agentEnvironment } from '../infra/environment.ts'
 import { existsSync, readFileSync, readdirSync, statSync, writeFileSync, mkdirSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { join } from 'node:path'
@@ -282,7 +283,7 @@ export class CliRunners {
     const id = randomUUID()
     const run: Run = { id, agent: input.agent, task: input.task, cwd: input.cwd, state: 'running', startedAt: new Date().toISOString(), output: '' }
     this.runs.set(id, { run })
-    const child = spawn(command, definition.args(input.task, input.cwd), { cwd: input.cwd, windowsHide: true, stdio: ['ignore', 'pipe', 'pipe'] })
+    const child = spawn(command, definition.args(input.task, input.cwd), { cwd: input.cwd, windowsHide: true, env: { ...process.env, ...agentEnvironment() }, stdio: ['ignore', 'pipe', 'pipe'] })
     this.runs.set(id, { run, child })
     const append = (chunk: Buffer): void => { run.output = truncated(run.output + chunk.toString(), 200_000) }
     child.stdout.on('data', append)

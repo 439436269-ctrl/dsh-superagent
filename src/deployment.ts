@@ -6,7 +6,7 @@ import type { Volatile } from '@deepseek-ai/cordis'
 import s from '@deepseek-ai/schemastery'
 import { z } from 'zod'
 import type { SubprocessRuntime } from '@deepseek-ai/dsh-subprocess'
-import { runAsWorker, sameDirectory, withoutDirectory, workerBin } from './infra/environment.ts'
+import { agentEnvironment, runAsWorker, sameDirectory, withoutDirectory, workerBin } from './infra/environment.ts'
 import { SetupError } from './setup.ts'
 
 const reason = (error: unknown): string => error instanceof Error ? error.message : String(error)
@@ -20,6 +20,7 @@ const EXECUTABLE_EXTENSIONS: readonly string[] = process.platform === 'win32'
 /** Plugin configuration of the dsh-superagent entry. Volatile fields apply without a restart because dsh-superagent reads them on each use; changing `stateDir` remounts the plugin. */
 export const Config = s.object({
   stateDir: absolute('Directory for the database, locks, worker shims, the agent\'s git configuration and, by default, the ticket directories.').required(),
+  masterDirectory: absolute('Workspace whose Session list holds the main Session, so a person can open it. Defaults to stateDir, which keeps it out of their own workspace.'),
   promptMaxChars: s.number().min(LIMITS.promptMaxChars.min).max(LIMITS.promptMaxChars.max).step(1).default(100000)
     .description('Largest saved prompt configuration, in characters.').volatile(),
   admissionContextMaxPages: s.number().min(LIMITS.admissionContextMaxPages.min).max(LIMITS.admissionContextMaxPages.max).step(1).default(10)
@@ -30,6 +31,8 @@ export const Config = s.object({
 export type DeploymentConfig = ReturnType<typeof Config>
 export interface Machine {
   stateDir: string
+  /** Workspace of the main Session; stateDir keeps it out of a person's workspace. */
+  masterDirectory: string
   promptMaxChars: Volatile<number>
   admissionContextMaxPages: Volatile<number>
   admissionContextTimeoutMs: Volatile<number>
@@ -44,8 +47,8 @@ const MOVED: Record<string, string> = {
 export function machineOf(config: DeploymentConfig): Machine {
   const unknown = Object.keys(config).filter(key => !(key in (Config.dict ?? {})))
   if (unknown.length) throw new Error(`dsh-superagent configuration has keys it does not use: ${unknown.map(key => MOVED[key] ? `${key} (now ${MOVED[key]})` : key).join(', ')}; docs/006-deployment.md lists the keys`)
-  const { stateDir, promptMaxChars, admissionContextMaxPages, admissionContextTimeoutMs } = config
-  return { stateDir, promptMaxChars, admissionContextMaxPages, admissionContextTimeoutMs }
+  const { stateDir, masterDirectory, promptMaxChars, admissionContextMaxPages, admissionContextTimeoutMs } = config
+  return { stateDir, masterDirectory: masterDirectory ?? stateDir, promptMaxChars, admissionContextMaxPages, admissionContextTimeoutMs }
 }
 
 export const GithubAccountsSchema = z.object({
@@ -84,7 +87,7 @@ export type Probe = (argv: string[], env?: Record<string, string>) => Promise<st
 export function workerProbe(subprocess: SubprocessRuntime, stateDir: string, cwd: string, signal: AbortSignal): Probe {
   const path = withoutDirectory(process.env.PATH ?? '', workerBin(stateDir))
   // win32 port: pass the environment instead of the POSIX `env` command, which Windows does not have.
-  return (argv, env) => runAsWorker(subprocess, argv, cwd, AbortSignal.any([signal, AbortSignal.timeout(60_000)]), { PATH: path, ...env })
+  return (argv, env) => runAsWorker(subprocess, argv, cwd, AbortSignal.any([signal, AbortSignal.timeout(60_000)]), { PATH: path, ...agentEnvironment(), ...env })
 }
 
 const GithubUser = z.object({ login: z.string().regex(/^[A-Za-z0-9-]+$/), id: z.number().int().positive() })
