@@ -107,3 +107,28 @@ stable) and hold no queue of its own, since the Outbox already retries.
 - A reply appears in the same chat, and a reply to a chat the bot was removed from is dropped rather than retried forever.
 - Stopping the Source stops the bridge process within a second or two.
 - A wrong token surfaces as a Source error with the adapter's own message, not as silence.
+
+## 企业微信（WeCom）
+
+`examples/im-bridges/wecom.mjs` wraps a 企业微信 self-built app. Unlike the other bridges, its **receive** mode is an
+HTTP server: 企业微信 has no way to subscribe to messages, so it calls the app's callback URL instead. Everything else
+matches this document — the receiver prints one JSON line per message, and `send` delivers one reply.
+
+Create the app in 企业微信管理后台, then read these:
+
+| Setting | Where | Used as |
+| --- | --- | --- |
+| 企业 ID | 我的企业 → 企业信息 | `WECOM_CORP_ID` |
+| AgentId | 应用管理 → 自建应用 | `WECOM_AGENT_ID` |
+| Secret | same page | `WECOM_SECRET` |
+| Token | 接收消息 → 设置 API 接收 | `WECOM_TOKEN` |
+| EncodingAESKey | same page | `WECOM_AES_KEY` |
+
+The callback URL must be reachable from the internet, because 企业微信 calls it: point it at
+`https://<your host>/wecom`. Any entry works — a reverse proxy on a NAS, a Cloudflare tunnel, or an intranet tunnel —
+and the bridge serves `WECOM_PATH` on `WECOM_PORT` (default `/wecom` on 8790). Only `text` messages become Triggers; the
+rest are acknowledged and dropped, because there is nothing to assess. A direct message is addressed to the agent with
+no mention, so the Feishu admission shape applies: `direct: { unlistedAddressed: 'explicit' }` in the Policy.
+
+Check the cryptography without an app: `node examples/im-bridges/wecom.test.mjs` encrypts a message the way 企业微信
+does and reads it back with the bridge's own decryption.
