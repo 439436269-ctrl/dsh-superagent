@@ -102,7 +102,12 @@ export class Runtime extends Service implements SourceHost {
         ? environmentOf({ deployment: setup.deployment, sources: this.sources, settings: store.settings() }) : undefined
       const feishu = () => setup.configured() && !!setup.deployment.feishu
       const prompts = this.prompts = new Prompts(store, () => machine.promptMaxChars.get(), deployed, feishu)
-      const masterId = this.masterId = store.get(KV.runtime.masterId) ?? `orchestrator-${key(machine.stateDir)}`
+      // The main Session is identified by where it lives, so moving it into a person's workspace opens a Session there
+      // rather than resolving to the one already stored under the previous workspace.
+      const located = machine.masterDirectory === machine.stateDir ? machine.stateDir : `${machine.stateDir}|${machine.masterDirectory}`
+      const derived = `orchestrator-${key(located)}`
+      const stored = store.get(KV.runtime.masterId)
+      const masterId = this.masterId = stored === derived ? stored : derived
       store.set(KV.runtime.masterId, masterId)
       const commands = this.commands = new Commands(() => setup.deployment, setup.commandEnvironment, this.lifetime)
       const board = this.board
