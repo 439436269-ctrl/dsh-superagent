@@ -214,6 +214,29 @@ export function assertSpawnable(argv: string[]): void {
   }
 }
 
+/**
+ * The accounts the agent's CLIs act as, found by convention: a GitHub account is a `gh` configuration directory and a
+ * chat app is a lark-cli configuration directory. A launcher can supply these as environment variables, but a Host that
+ * starts this plugin in its own process inherits the operator's environment instead, where `gh` is signed in as the
+ * person who runs DSH — the agent would then read their account's notifications and read issues as them. Pointing at
+ * its own configuration directories keeps the agent's identity its own, whichever process started it.
+ */
+export function agentEnvironment(): Record<string, string> {
+  const home = process.env.USERPROFILE ?? process.env.HOME
+  if (!home) return {}
+  const found: Record<string, string> = {}
+  const conventions: [string, string[]][] = [
+    ['GH_CONFIG_DIR', ['.config', 'gh-agent']],
+    ['LARKSUITE_CLI_CONFIG_DIR', ['.lark-cli-dsh-superagent']],
+  ]
+  for (const [name, parts] of conventions) {
+    if (process.env[name]) continue
+    const directory = join(home, ...parts)
+    try { if (statSync(directory).isDirectory()) found[name] = directory } catch { /* Not configured on this machine. */ }
+  }
+  return found
+}
+
 /** Spawns a command through the DSH subprocess runtime, which strips credential-shaped environment variables. */
 export async function runAsWorker(subprocess: SubprocessRuntime, argv: string[], cwd: string, signal: AbortSignal, env?: Record<string, string>): Promise<string> {
   assertSpawnable(argv)
