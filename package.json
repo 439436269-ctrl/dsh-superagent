@@ -17,6 +17,7 @@
     "./github-watch": "./lib/github-watch.js",
     "./feishu-watch": "./lib/feishu-watch.js",
     "./im-watch": "./lib/im-watch.js",
+    "./kind": { "types": "./lib/kind.d.ts" },
     "./package.json": "./package.json",
     "./locale/*.json": "./locale/*.json"
   },
