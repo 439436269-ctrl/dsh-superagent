@@ -11,11 +11,11 @@ The core is built around a contract, not around GitHub and Feishu. Evidence:
 
 | Seam | Where | How a kind plugs in |
 | --- | --- | --- |
-| **Source kind** | `src/sources/kind.ts` — `SourceKind` covers config schema, panel fields, policy part, channel, thread reader | `SourceRegistry.register(kind)` (`src/sources/registry.ts`), which rejects a duplicate kind and returns a disposer |
-| **One entry per kind** | `tsdown.config.ts`: `github-watch` ← `src/sources/github.ts`, `feishu-watch` ← `src/sources/feishu.ts`, `im-watch` ← `src/sources/im.ts` | Each becomes its own bundle entry in `cordis.patch.yml`, enabled or disabled on its own |
+| **Source kind** | `src/sources/kind.ts` 鈥?`SourceKind` covers config schema, panel fields, policy part, channel, thread reader | `SourceRegistry.register(kind)` (`src/sources/registry.ts`), which rejects a duplicate kind and returns a disposer |
+| **One entry per kind** | `tsdown.config.ts`: `github-watch` 鈫?`src/sources/github.ts`, `feishu-watch` 鈫?`src/sources/feishu.ts`, `im-watch` 鈫?`src/sources/im.ts` | Each becomes its own bundle entry in `cordis.patch.yml`, enabled or disabled on its own |
 | **Any chat tool** | `docs/009-im-bridge.md` | An external process: a "bridge" speaks JSON lines on stdout and takes one JSON argument to send |
 | **Agent presets** | `cordis.patch.yml`: `dsh-superagent-worker-preset`, `dsh-superagent-router-preset` | A preset entry, replaceable without touching the plugin |
-| **Other agents as workers** | `orchestrator_agent_*` tools (`src/sessions/bus.ts`) | Any CLI whose non-interactive command is installed — codex, claude, gemini, opencode |
+| **Other agents as workers** | `orchestrator_agent_*` tools (`src/sessions/bus.ts`) | Any CLI whose non-interactive command is installed 鈥?codex, claude, gemini, opencode |
 | **Settings surfaces** | `src/app/views/settings.ts` builds `blocks` (policy/eval/executor) and `sources[]` from the registry | A kind supplies its own card, fields and policy rows |
 
 So "extend" today means: **write a module that exports a `SourceKind` and add a bundle entry**. That is real
@@ -29,7 +29,7 @@ decoupling inside this repository. It is not yet decoupling *outside* it.
    this repo, wrong for anyone else.
 3. **The Executor is hard-coded.** A Ticket always runs as a DSH Session in a git worktree (`src/executor`). There is no
    contract for "run this ticket somewhere else" (a container, a CI job, a remote machine).
-4. **No catalog.** Nothing lists what may be installed, what is installed, or what is incompatible — the surface
+4. **No catalog.** Nothing lists what may be installed, what is installed, or what is incompatible 鈥?the surface
    dsh-market provides for plugins.
 
 ## 3 The model
@@ -37,7 +37,7 @@ decoupling inside this repository. It is not yet decoupling *outside* it.
 Three layers, each useful on its own:
 
 ```
-contract package  →  discovery & loading  →  catalog & install
+contract package  鈫? discovery & loading  鈫? catalog & install
 (@dsh-superagent/kind)   (config + runtime)      (panel + JSON catalog)
 ```
 
@@ -69,7 +69,7 @@ so an extension can be written, tested and released on its own cadence.
 
 ### 3.2 Two new contracts
 
-**ExecutorKind** — today one Ticket runs as a DSH Session. The same shape, generalised:
+**ExecutorKind** 鈥?today one Ticket runs as a DSH Session. The same shape, generalised:
 
 ```ts
 export interface ExecutorKind {
@@ -87,28 +87,46 @@ export interface ExecutorKind {
 branch name. The DSH-session executor becomes `dsh-superagent/executor-dsh`; a container executor is then an
 extension rather than a fork.
 
-**ChannelKind** — the reply side. Today a kind answers through its own channel member; splitting it lets one Source
+**ChannelKind** 鈥?the reply side. Today a kind answers through its own channel member; splitting it lets one Source
 answer through another (a GitHub issue whose replies land in a chat), which is the shape most teams actually want.
 
-### 3.3 Discovery and loading
+### 3.3 Discovery and loading: DSH's own plugin system
 
-One new plugin setting, `extensions`:
+**There is no second loader, and none is needed.** `src/app/runtime.ts` declares
+`interface Context { orchestrator: SourceHost }` and mounts itself with `super(ctx, 'orchestrator')`, and its own
+comment says source plugins interact with dsh-superagent *exclusively* through that interface. So an extension is an
+ordinary DSH plugin:
 
-```yaml
-- id: dsh-superagent
-  config:
-    stateDir: C:/Users/Lenovo/.dsh/state/superagent
-    extensions:
-      - module: '@acme/superagent-wecom'   # a package that exports `manifest` and `kind`
+```ts
+// @acme/superagent-notes — an installable DSH plugin, no fork of this repository
+import type { Context } from '@deepseek-ai/cordis'
+import type { SourceKind } from 'dsh-superagent/kind'
+import { notesKind } from './kind.ts'
+
+export const name = 'superagent-notes'
+export const inject = ['orchestrator']
+export function apply(ctx: Context): void {
+  ctx.effect(() => ctx.orchestrator.sources.register(notesKind), 'notes: source kind')
+}
 ```
 
-The runtime imports each module, checks `manifest.contract` and `engines.superagent`, calls
-`registry.register(kind)`, and reports the result in a new **Extensions** section of the panel: installed, enabled,
-version, and *why* it did not load. A failed extension never takes the plugin down — it is listed with its error, the
-same way a Source that is `error` stays visible in Sources.
+Discovery, enable/disable, versions and supply-chain checks are then DSH's, already built: `dsh plugin add`, the plugin
+manager, and the market. What this repository owes an extension writer is the **contract import path** —
+`dsh-superagent/kind` (a types entry plus the `CONTRACT` version) — so nobody reaches into `src/`.
 
-This mirrors the bundle patch's insert list, so the built-in kinds keep working with no configuration at all: they are
-simply pre-registered by the bundle, and the `extensions` list adds to them.
+```json
+"exports": { "./kind": { "types": "./lib/kind.d.ts" } }
+```
+
+The built-in kinds are registered by their own bundle entries exactly as above, which is why they keep working with no
+configuration: `dsh-superagent-github` and `dsh-superagent-feishu` are, in every respect, extensions that happen to ship
+in this package.
+
+### 3.3.1 What the panel still needs
+
+Registration answers "does it work"; the panel must answer "what is installed, and why did one not load". `/sources`
+already lists every registered kind with its health; the Extensions section adds the manifest — origin (built-in or
+community), homepage, contract version — and a row for a kind whose `apply` threw.
 
 ### 3.4 Catalog and install
 
@@ -125,15 +143,14 @@ A static JSON catalog (one file, one repository, like dsh-market's), plus four r
 { "version": 1,
   "extensions": [
     { "module": "@acme/superagent-wecom", "kind": "source", "id": "wecom",
-      "name": { "zh": "企业微信", "en": "WeCom" }, "engines": { "superagent": "^0.1" } } ] }
+      "name": { "zh": "浼佷笟寰俊", "en": "WeCom" }, "engines": { "superagent": "^0.1" } } ] }
 ```
 
-Installing is deliberately **not** a hot load of arbitrary code: the same trust boundary as `dsh plugin add` applies —
-a person installs a package, and the panel only wires it into `extensions`.
+Installing is deliberately **not** a hot load of arbitrary code: the same trust boundary as `dsh plugin add` applies 鈥?a person installs a package, and the panel only wires it into `extensions`.
 
 ## 4 What not to do
 
-- **Do not** make the core event-sourced or generic. Trigger → Ticket → Assignment → Report is the product; extensions
+- **Do not** make the core event-sourced or generic. Trigger 鈫?Ticket 鈫?Assignment 鈫?Report is the product; extensions
   attach at its edges (Source in, Executor middle, Channel out), not in the middle.
 - **Do not** add a sandbox for extensions. They run in-process with the same trust as a DSH plugin; pretending
   otherwise would be worse than saying it.
@@ -143,9 +160,9 @@ a person installs a package, and the panel only wires it into `extensions`.
 
 | Step | Change | Verified by |
 | --- | --- | --- |
-| **1. Contract** | Move `SourceKind` and friends into `@dsh-superagent/kind` (a workspace package, published as types only); `src/sources/kind.ts` re-exports it. No behaviour change. | `tsc`, the existing 1204-test suite unchanged, build |
-| **2. Discovery** | `extensions` config + loader + registry wiring + Extensions panel section. Built-in kinds still come from the bundle. | A test that loads a fixture extension and asserts it appears in `/sources`; a test that a bad manifest is listed as failed and the plugin still serves |
-| **3. First outside extension** | Ship the WeCom source as `@acme/superagent-wecom` — the bridge from `examples/im-bridges/wecom.mjs` becomes an in-process kind with the same crypto tests. | The WeCom self-check plus an end-to-end callback against a real app |
+| **1. Contract entry** (done) | `src/kind.ts` re-exports the contract as `dsh-superagent/kind` and exports `CONTRACT = 1`; no behaviour change, built as its own entry (`lib/kind.d.ts`). | `tsc`, `pnpm build`, `node -e "import(.../lib/kind.js)"` printing `CONTRACT = 1` |
+| **2. First outside extension** | Ship WeCom as a separate DSH plugin package (reusing the bridge's crypto): `inject: ['orchestrator']` + `ctx.orchestrator.sources.register(kind)`. Built-ins keep working unchanged. | The WeCom self-check, plus a real callback against a 企业微信 app; the plugin must load with **no** edit to this repository |
+| **3. Panel and catalog** | Extensions section (manifest, origin, failed rows) and the catalog routes. | A person installs the WeCom plugin, sees it listed with its manifest, and uninstalls it without losing the rest |
 
 Step 3 is the honest test of the design: if the WeCom kind needs an edit to the core, the contract is wrong.
 
