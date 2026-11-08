@@ -119,3 +119,26 @@
 3. `validItems(ListedSchema, …)` 是否在进入循环前就把条目过滤掉
 
 建议做法：在这三处 `continue` 前各记一次计数（写进 health detail 或临时 KV），跑一轮看落在哪，再修并删掉诊断。
+
+## 未结问题二：两个游标长时间冻结（2026-11-08 22:52）
+
+```
+github-stream:issues                          since 13:59:02（默认仓 superagent-sandbox）
+github-stream:…superagent-second:issues       since 14:36:02（第二仓）
+```
+
+此后近 50 分钟内反复重启、`observeIssues=true`、`repositories` 配置正确，两个游标**都没有前进**，`github-skipped` 计数记录也从未出现。
+
+已排除：
+- 配置：`repositories` 有第二仓，`observeIssues=true`，rev=3
+- 服务：`/sources` 显示 github `ready`，health 文案正常
+- 轮询范围：修复后 `served` = 默认仓 + 额外仓，两个游标键都在被读写
+- 与 `dsh-schedule` 的 `unit 'schedule': stored version 2 != expected 1` 无直接关系（该错误只出现 2 次，来自另一个插件）
+
+**未能解释**：为什么轮询没有把 `since` 之后的 issue（#9、#10）变成触发。
+
+下一步建议（按代价从低到高）：
+1. 在 `pollRepository` 入口记一次 KV（`github-poll:<repository>` = 时间戳），确认轮询是否真的按周期执行
+2. 记录 `readStream` 的 HTTP 状态码（200/304）与返回条数
+3. 若确认轮询在跑但接口一直 304，检查 `conditional`（`If-None-Match`）与 `since` 的配合是否让 GitHub 复用了旧 etag
+4. 万不得已：重置 `C:/Users/Lenovo/.dsh/state/superagent-dev`（开发沙箱，无真实数据），从干净状态重跑
