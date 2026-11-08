@@ -45,7 +45,12 @@ const BLOCKS: Record<'policy' | 'eval' | 'executor' | 'source', Block> = {
     guard: (current, candidate, origin) => { if (origin !== 'panel' && environment(current) !== environment(candidate)) throw new UserError('panelOnlyEnvironment') },
   },
   source: {
-    parse: (value, sources, id) => sources.validate(id, z.object({ enabled: z.boolean(), config: z.unknown() }).parse(value)),
+    // A new instance names the kind it runs; the registry validates against that kind and the name is kept with the entry.
+    parse: (value, sources, id) => {
+      const submitted = z.object({ kind: z.string().optional(), enabled: z.boolean(), config: z.unknown() }).parse(value)
+      const validated = sources.validate(id, submitted)
+      return submitted.kind ? { ...validated, kind: submitted.kind } : validated
+    },
     merge: (settings, value, id) => ({ ...settings, sources: { ...settings.sources, [id]: value as SettingsValue['sources'][string] } }),
     // Only the management panel may switch source accounts.
     guard: (current, candidate, origin) => { if (origin !== 'panel' && setupChanged(current, candidate)) throw new UserError('panelOnlyAccounts') },
@@ -153,7 +158,9 @@ export class Settings {
     const kind = block.startsWith('source:') ? 'source' : block
     if (!(kind in BLOCKS)) throw new UserError('unknownBlock', { block })
     const rules = BLOCKS[kind as keyof typeof BLOCKS]
-    if (kind === 'source' && !sources.kind(id)) throw new UserError('sourceNotInstalled', { source: id })
+    // A new instance states its kind in the submitted value; an existing one is known by its id.
+    const declares = kind === 'source' && typeof (value as { kind?: unknown } | null)?.kind === 'string'
+    if (kind === 'source' && !sources.kind(id) && !declares) throw new UserError('sourceNotInstalled', { source: id })
     const parsed = rules.parse(value, sources, id)
     const current = store.settings()
     const candidate = rules.merge(current, parsed, id)

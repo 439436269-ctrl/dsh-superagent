@@ -20,6 +20,11 @@ export const ImConfigSchema = z.object({
     .default([]),
   directMessages: z.boolean().default(true),
   otherChats: z.enum(['none', 'mentions']).default('none'),
+  /**
+   * Environment for this instance's bridge, on top of the process environment: how two instances of the same kind carry
+   * their own credentials instead of sharing the service's.
+   */
+  env: z.record(z.string(), z.string()).default({}),
 }).strict()
 export type ImConfig = z.infer<typeof ImConfigSchema>
 
