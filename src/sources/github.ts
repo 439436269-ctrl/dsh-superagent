@@ -211,7 +211,9 @@ async function readStream(ctx: SourceContext, round: Round, id: string, path: st
   // Every Trigger from this poll names the repository it came from, so the ticket it becomes knows where it works.
   // Named only when it differs from the default, so a single-repository deployment is unchanged.
   const stamped = (trigger: Trigger): Trigger => repository !== ctx.deployment.repository
-    ? { ...trigger, meta: { ...trigger.meta, repository } } : trigger
+    ? { ...trigger, meta: { ...trigger.meta, repository },
+        ...trigger.channel ? { channel: { ...trigger.channel, address: { ...trigger.channel.address, repository } } } : {} }
+    : trigger
   const name = KV.github.stream(id)
   const stored = ctx.state.get(name)
   const kinds = id === 'issues' ? [...config.observeIssues ? ['issues'] : [], ...config.observePulls ? ['pulls'] : []] : ['comments']
@@ -361,7 +363,9 @@ async function readNotified(ctx: SourceContext, round: Round, number: number, it
   // Only a repository other than the default is named: a single-repository deployment then produces exactly the triggers
   // it did before, and readers fall back to the configured repository when the meta is absent.
   const stamped = (trigger: Trigger): Trigger => item.repository && item.repository !== ctx.deployment.repository
-    ? { ...trigger, meta: { ...trigger.meta, repository: item.repository } } : trigger
+    ? { ...trigger, meta: { ...trigger.meta, repository: item.repository },
+        ...trigger.channel ? { channel: { ...trigger.channel, address: { ...trigger.channel.address, repository: item.repository } } } : {} }
+    : trigger
   let isPr = item.pr
   if (!isPr) {
     const issue = await ctx.commands.withSignal(round.signal).api(IssueSchema, `issues/${number}`)
@@ -405,7 +409,9 @@ async function intakeComments(ctx: SourceContext, ref: PullRef, since: string, r
   const { login } = ctx.deployment.github
   // A comment on a Thread keeps the repository its notification named; without it the ticket falls back to the default.
   const stamped = (trigger: Trigger): Trigger => repository && repository !== ctx.deployment.repository
-    ? { ...trigger, meta: { ...trigger.meta, repository } } : trigger
+    ? { ...trigger, meta: { ...trigger.meta, repository },
+        ...trigger.channel ? { channel: { ...trigger.channel, address: { ...trigger.channel.address, repository } } } : {} }
+    : trigger
   const kinds = ref.isPr ? ['conversation', 'inline', 'review'] as const : ['conversation'] as const
   for (const kind of kinds) {
     const suffix = `&since=${encodeURIComponent(since)}`
