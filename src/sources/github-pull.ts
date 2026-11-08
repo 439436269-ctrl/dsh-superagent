@@ -21,8 +21,12 @@ export const pullsOf = (ticket: Pick<Ticket, 'follows'>, open = false): number[]
 export const pullOf = (ticket: Pick<Ticket, 'follows'>): number | undefined => pullsOf(ticket, true).at(-1) ?? pullsOf(ticket).at(-1)
 /** True when the PR was opened by the agent account from a branch in the configured repository (not a fork). */
 export const agentPull = (pr: { user: { login: string }; head?: { repo?: { full_name: string } | null } | null },
-  deployment: Pick<Deployment, 'github' | 'repository'>): boolean =>
-  sameName(pr.user.login, deployment.github.login) && sameName(pr.head?.repo?.full_name ?? '', deployment.repository)
+  deployment: Pick<Deployment, 'github' | 'repository' | 'repositories'>): boolean => {
+  // A deployment may serve several repositories; without the list it serves the default one.
+  const served = deployment.repositories?.length ? deployment.repositories : [deployment.repository]
+  return sameName(pr.user.login, deployment.github.login)
+    && served.some(name => sameName(pr.head?.repo?.full_name ?? '', name))
+}
 /** True when a branch belongs to the ticket: its last path segment is the ticket's short name, such as `agent/<name>`. */
 export const ticketBranch = (ticket: Pick<Ticket, 'execution'>, ref: string): boolean =>
   !!ticket.execution?.name && ref.split('/').at(-1) === ticket.execution.name
