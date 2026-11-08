@@ -1,9 +1,8 @@
 {
-  "name": "dsh-superagent",
+  "name": "dsh-superagent-crew",
   "author": "DeepSeek Harness Team <team@dsh.dev>",
   "license": "MIT",
   "version": "0.1.0",
-  "private": true,
   "description": "A proactive agent for one GitHub repository, as a DSH (DeepSeek Harness) bundle: it listens to GitHub and optionally Feishu, evaluates requests under a Policy, turns authorized ones into Tickets, and executes each in its own DSH Session.",
   "type": "module",
   "main": "lib/index.js",
@@ -18,7 +17,9 @@
     "./feishu-watch": "./lib/feishu-watch.js",
     "./im-watch": "./lib/im-watch.js",
     "./session-watch": "./lib/session-watch.js",
-    "./kind": { "types": "./lib/kind.d.ts" },
+    "./kind": {
+      "types": "./lib/kind.d.ts"
+    },
     "./claim": "./lib/claim.js",
     "./package.json": "./package.json",
     "./locale/*.json": "./locale/*.json"
@@ -125,5 +126,18 @@
     "react-dom": "18.3.1",
     "@types/react-dom": "18.3.7",
     "@deepseek-ai/dsh-subprocess": "0.2.1-alpha.2"
-  }
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/439436269-ctrl/dsh-superagent.git"
+  },
+  "homepage": "https://github.com/439436269-ctrl/dsh-superagent#readme",
+  "keywords": [
+    "dsh-plugin",
+    "deepseek-harness",
+    "agent",
+    "code-review",
+    "github",
+    "automation"
+  ]
 }
