@@ -76,7 +76,11 @@ export function imTrigger(message: ImMessage, bridge: string, args: string[]): T
 const rest = async (ms: number, signal: AbortSignal): Promise<void> => { await delay(ms, undefined, { signal }).catch(() => { /* aborted */ }) }
 
 /** Runs the bridge for as long as the Source is on, restarting it with a bounded backoff when it exits. */
-export async function runIm(ctx: SourceContext, signal: AbortSignal): Promise<void> {
+export async function runIm(ctx: SourceContext, signal: AbortSignal, instance = 'im'): Promise<void> {
+  // Admission resolves a Channel's instance by name; without it a second instance is checked against the default one's chats.
+  const own = <T extends { channel?: { address: Record<string, string> } }>(trigger: T): T =>
+    instance === 'im' || !trigger.channel ? trigger
+      : { ...trigger, channel: { ...trigger.channel, address: { ...trigger.channel.address, instance } } }
   await ctx.ready
   let failures = 0
   while (!signal.aborted) {
