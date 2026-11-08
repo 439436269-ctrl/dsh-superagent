@@ -66,6 +66,11 @@ export const SETUP_FIELDS: Readonly<Record<string, readonly string[]>> = { githu
 
 export interface Deployment extends Machine {
   repository: string
+  /**
+   * Every repository this deployment serves; empty or absent means only `repository`, which stays the default a
+   * single-repository deployment names (docs/013-multi-repository.md). Optional so no construction site has to change.
+   */
+  repositories?: string[]
   github: { cli: string; login: string; noreply: string }
   feishu?: FeishuBot
 }
