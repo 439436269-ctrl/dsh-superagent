@@ -31,8 +31,10 @@ export function message(body) {
     fromName: body?.senderNick ?? undefined,
     text,
     at: new Date(Number(body?.createAt ?? Date.now())).toISOString(),
-    // The robot only receives messages that address it, so every callback is already a mention.
-    mentionsBot: true,
+    // DingTalk says whether this robot is in the message's @ list. A group can hold several robots, and each one's stream sees
+    // the same conversation, so this flag is what keeps a message from being treated as addressed to every robot in it.
+    // A payload without the field (a direct message, or an older shape) counts as addressed to this robot.
+    mentionsBot: body?.isInAtList === undefined ? true : body.isInAtList === true,
     fromBot: false,
     replyTo: null,
   }
