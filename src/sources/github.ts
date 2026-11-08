@@ -200,7 +200,7 @@ async function pollRepository(ctx: SourceContext, round: Round): Promise<void> {
       // repository needs its own cursor, or two repositories would skip each other's items.
       const name = repository === ctx.deployment.repository ? stream.id : `${repository}:${stream.id}`
       if (!stream.observed(config)) { ctx.state.set(KV.github.stream(name), undefined); continue }
-      try { await readStream(ctx, round, name, stream.path, config, repository) }
+      try { await readStream(ctx, round, stream.id, stream.path, config, repository) }
       catch (error) { if (!stopped(ctx, round)) round.failures.push(`${name}: ${String(error)}`) }
     }
   }
@@ -226,7 +226,8 @@ async function readStream(ctx: SourceContext, round: Round, id: string, path: st
     ? { ...trigger, meta: { ...trigger.meta, repository },
         ...trigger.channel ? { channel: { ...trigger.channel, address: { ...trigger.channel.address, repository } } } : {} }
     : trigger
-  const name = KV.github.stream(id)
+  // The cursor belongs to one stream of one repository; the default repository keeps its original key.
+  const name = repository === ctx.deployment.repository ? KV.github.stream(id) : KV.github.stream(`${repository}:${id}`)
   const stored = ctx.state.get(name)
   const kinds = id === 'issues' ? [...config.observeIssues ? ['issues'] : [], ...config.observePulls ? ['pulls'] : []] : ['comments']
   const before = typeof stored?.started === 'object' ? stored.started : {}
@@ -238,7 +239,9 @@ async function readStream(ctx: SourceContext, round: Round, id: string, path: st
   const listed = `${path}&sort=updated&direction=asc&per_page=100&since=${encodeURIComponent(since)}`
   try { raw = await ctx.commands.forRepository(repository).withSignal(round.signal).api(listed, '--include', ...conditional) }
   catch (error) {
-    if (error instanceof CliError && error.code === 304) return
+      // A cursor written before a stream kind was observed lacks that kind in started, and the items of that kind
+      // would then look stale forever; recording the kinds here repairs such a cursor on the next unchanged list.
+      if (error instanceof CliError && error.code === 304) { ctx.state.set(name, { ...stored, started }); return }
     throw error
   }
   const { headers, body } = included(raw)
