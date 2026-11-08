@@ -32,6 +32,7 @@ Read the numbered documents in order; each builds only on the ones before it.
 - [009 IM bridge](docs/009-im-bridge.md): reaching another chat tool through a bridge adapter
 - [010 Session bus](docs/010-session-bus.md): reading other Sessions, and handing work to other agents
 - [011 Extensions](docs/011-extensions.md): growing the agent without changing its core
+- [012 Dispatcher](docs/012-dispatcher.md): designating the Session that judges and assigns work
 
 ## Supervise other Sessions
 
