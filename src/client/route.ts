@@ -4,7 +4,7 @@ import type { SetupPlace } from '../setup.ts'
 import { DECISION_FILTERS, type DecisionFilter } from './api.ts'
 import type { T } from './text.ts'
 
-export const TABS = ['overview', 'source', 'trigger', 'eval', 'execution', 'settings'] as const
+export const TABS = ['overview', 'source', 'trigger', 'eval', 'execution', 'dispatcher', 'settings'] as const
 export type Tab = typeof TABS[number]
 export const SETTINGS_GROUPS = ['source', 'eval', 'execution', 'prompts', 'deployment'] as const
 export type SettingsGroup = typeof SETTINGS_GROUPS[number]
@@ -14,6 +14,7 @@ export type Route = { page: 'overview' | 'source'; id?: undefined; query?: undef
   | { page: 'eval'; id?: undefined; query?: { filter?: DecisionFilter; window?: '24h' } }
   | { page: 'execution'; id?: undefined; query?: { filter?: TicketFilter } }
   | { page: 'execution'; id: string; query?: undefined }
+  | { page: 'dispatcher'; id?: undefined; query?: undefined }
   | { page: 'settings'; id?: undefined; query: { group: SettingsGroup; source?: string; version?: string } }
 export const HOME: Route = { page: 'overview' }
 export const settingsRoute = (group: SettingsGroup, query: { source?: string; version?: string } = {}): Route =>
