@@ -30,7 +30,7 @@ export interface SourceContextDeps {
  * Builds the context for one Source kind. Health reports are restricted to entries declared by the kind and
  * bound to the active registration, becoming no-ops once unregistered.
  */
-export function sourceContextOf(deps: SourceContextDeps, kind: { kind: string; health: readonly string[] }): SourceContext {
+export function sourceContextOf(deps: SourceContextDeps, kind: { kind: string; health: readonly string[] }, instance = kind.kind): SourceContext {
   const { store } = deps
   const health = deps.sources.healthEntries(kind.health)
   return {
@@ -39,7 +39,8 @@ export function sourceContextOf(deps: SourceContextDeps, kind: { kind: string; h
     ready: deps.ready,
     configured: () => deps.configured(),
     get problem() { return [deps.feishuProblem, deps.setupProblem].find(problem => problem?.place === kind.kind) },
-    config: <C extends Record<string, unknown>>(id: string) => {
+    // The bound instance answers when no id is given, which is what lets one kind serve several instances.
+    config: <C extends Record<string, unknown>>(id: string = instance) => {
       const instance = deps.sources.instance<C>(id)
       return instance?.enabled ? instance.config : undefined
     },
