@@ -30,7 +30,7 @@ export function directionAllowed(value: unknown): value is AdmissionDirection {
 }
 export interface Assessment {
   decision: 'accept' | 'ignore' | 'unavailable'; rule_assessments: RuleAssessment[]; direction: unknown
-  title: string; scope: string; reason: string; intent_evidence?: string | null; acknowledgement?: string | null; worktree_name?: string
+  title: string; scope: string; reason: string; intent_evidence?: string | null; acknowledgement?: string | null; reply?: string | null; worktree_name?: string
 }
 /**
  * Validate an assessment against enabled rules and convert it into an engine `AssessmentOutcome`.
@@ -48,7 +48,7 @@ export function assessmentOutcome(assessment: Assessment, settings: Pick<Setting
   const matches = judged.filter(item => item.matched).map(({ rule_id, reason }) => ({ rule_id, reason }))
   const evidence = assessment.intent_evidence ? { intent_evidence: assessment.intent_evidence } : {}
   const audit = { matches, rule_assessments: judged, direction: assessment.direction, ...evidence }
-  if (assessment.decision !== 'accept') return { kind: assessment.decision, reason: assessment.reason, audit }
+  if (assessment.decision !== 'accept') return { kind: assessment.decision, reason: assessment.reason, audit, ...(assessment.decision === 'ignore' && assessment.reply ? { reply: assessment.reply } : {}) }
   if (!directionAllowed(assessment.direction)) return { kind: 'ignore', audit, reason: { code: 'directionUnsettled' } }
   if (!matches.length) return { kind: 'ignore', audit, reason: { code: 'noRuleMatched' } }
   if (!assessment.intent_evidence) throw new Error('Acceptance requires intent_evidence')

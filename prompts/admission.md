@@ -66,3 +66,19 @@ Use ignore for readable discussion that does not establish a qualifying change; 
 The candidate lists the thread's existing tickets, including ended ones: when the discussion continues one of them, use decision=ignore instead of accepting a duplicate; the thread's messages already reach that ticket, and a person's message resumes an ended one unless a person stopped it.
 Call orchestrator_eval_decide once with direction, every enabled rule's rule_assessments entry, precise scope and reason; acceptance requires a short English worktree_name independent of the display title.
 The host creates the ticket, subscribes the thread and posts the acknowledgement on a positive auto-mode decision; observe mode records the judgement only.
+
+## Never leave a message addressed to the agent unanswered
+
+An ignore may carry a `reply`: one short sentence in the source language, posted where the message was written. Use it
+whenever the message addresses the agent directly even though it asks for no work — a greeting, “are you there?”, a
+question about what the agent can do, thanks, or a report that needs no action. The person wrote to this agent, so
+silence reads as a broken agent.
+
+- Greeting → `{"decision":"ignore","reply":"在，有什么要我做的？",…}`
+- Asking what this agent does → reply with one line saying what it does here, never a menu.
+- Thanks or a status question with nothing to do → one line, no ticket.
+- Chatter between other people, or a bot's notice → no `reply`; those are not addressed to the agent.
+- Work you are accepting → never use `reply`; the acceptance's `acknowledgement` is that message.
+
+Keep it to one sentence. Do not offer options, do not ask a follow-up question, and do not promise work you were not asked
+for.
