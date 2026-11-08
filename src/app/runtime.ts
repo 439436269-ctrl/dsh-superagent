@@ -109,11 +109,12 @@ export class Runtime extends Service implements SourceHost {
    * plugin restarts so the new main Session is resolved and decorated before the next Trigger arrives.
    */
   setDispatcher(id: string | null): { dispatcher: string } {
-    // The store parses every value as JSON, so an empty string would break the next start; clearing records the
-    // derived default instead, which also reads back as the default rather than as a claim.
-    this.store.set(KV.runtime.dispatcher, id ?? this.defaultMasterId)
+    // Clearing deletes the record rather than storing a placeholder: an empty string is not valid JSON for the store's
+    // reader, and a stored default would be indistinguishable from a claim in the panel.
+    if (id) this.store.set(KV.runtime.dispatcher, id)
+    else this.store.delete(KV.runtime.dispatcher)
     this.restart()
-    return { dispatcher: id ?? '' }
+    return { dispatcher: id ?? this.defaultMasterId }
   }
   /** The id derived from the directories: what the dispatcher is when nobody has claimed it. */
   private defaultMasterId = ''
