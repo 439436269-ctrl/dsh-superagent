@@ -137,7 +137,9 @@ export class SourceRegistry implements SourceScope {
   }
   scope(input: { source: string; meta: Record<string, unknown> }, settings = this.settings()): ScopeResult {
     const kind = this.kinds.get(input.source)
-    const stored = settings.sources[input.source]
+    // A Trigger from a non-default instance names it, so the scope is judged by that instance's configuration.
+    const named = typeof (input.meta as { instance?: unknown } | undefined)?.instance === 'string' ? (input.meta as { instance: string }).instance : undefined
+    const stored = settings.sources[named ?? input.source]
     // Without its kind plugin the stored scope cannot be evaluated, so a configured Source whose plugin is missing listens to nothing.
     if (!kind) return stored ? { listened: false, reason: 'source_not_installed' } : { listened: true, observed: false }
     const instance = this.resolve(kind, stored)
