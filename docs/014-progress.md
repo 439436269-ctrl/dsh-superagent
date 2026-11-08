@@ -1,0 +1,78 @@
+# 014 项目进展与交接（2026-11-08）
+
+> 这份文档的目的：**换会话、换机器、上下文清空之后，读它就能接上**。不依赖任何对话记忆。
+
+## 仓库
+
+- 工作副本：`E:\codes\dsh-superagent-prototype`
+- 远端：`https://github.com/439436269-ctrl/dsh-superagent`（main）
+- 推送需要 operator token：`git -c credential.helper= push "https://439436269-ctrl:$token@github.com/..."`（凭据管理器里那个 VFVrPQ 会被拒）
+- 本地 git 身份：`vfvrpq <439436269@qq.com>`
+
+## 这一轮做了什么（按时间）
+
+| 提交 | 内容 |
+|---|---|
+| `5d7b62d` | `GET dispatcher` 接口（id / 可达 / 在跑） |
+| `a0a869f` | 面板「调度者」tab |
+| `eb05a3c` | 按 id 指定调度者 + kv 持久化 |
+| `186cb1f` | 从会话列表选调度者 |
+| `a87763e` | `orchestrator_claim` 工具（router 预设） |
+| `b32e605` | 两个启动致命 bug（空串 kv、跨工作区 claim） |
+| `b131940` | 回落原因上报 |
+| `b00b1ad` | 列表 + 输入框并存 |
+| `05f4d64` | 清空改为删除 kv 记录 |
+| `7e0e9fd` | claim 工具单测 |
+| `bb15470` | 提示词：被要求时才 claim |
+| `17c4c8b` | 概览页显示调度者 |
+| `33ee9ea` | **修 400**：延迟 15 秒再重启 |
+| `0610dc1` | `orchestrator_notify`（任意会话 → 调度者） |
+| `b9aab59` | 钉钉桥 + 测试 + 文档 |
+| `aa10b77` | 提示词：如何读别会话的消息 |
+| `63cdc0f` | session source 构造器 + 测试 |
+| `dd63693` | **注册 session source**，delegate 入管道 |
+| `46d30ff` | 修 delegate 返回值（trigger id） |
+| `dad8a75`/`c34d876` | 钉钉桥真进程测试（验签） |
+| `606f206` | request 与 delegate 统一走管道 |
+| `1b4f088` | `docs/013` 多仓方案 |
+
+## 已验证的（有实机证据）
+
+1. **调度者**：面板显示/切换/恢复默认；claim 后重启保持；跨进程会话被拒时回落并报原因
+2. **400 已修**：claim → 等 30 秒 → 第二轮回话正常，`INVALID_REQUEST=false`
+3. **会话互通**：任意会话 `orchestrator_notify` → `session` 源 `received=1` → 进入判定记录
+4. **钉钉公网链路**：cloudflared 隧道 POST → 200 `{"errcode":0}` → 输出标准 message 行
+
+## 未完成 / 卡住的
+
+| 项 | 状态 | 原因 |
+|---|---|---|
+| 钉钉真实联调 | 卡住 | 缺 `DINGTALK_APP_SECRET`、webhook `access_token`、加签 secret（只在钉钉后台） |
+| 测试基线核对 | 未做 | 全量 62 failed / 1155 passed；`runtime` 8 / `docs` 3 / `commands` 4 是已知基线，`service-script` 15 看过是 Unix 进程语义；**未用 git stash 对跑**，其余组是推断不是结论 |
+| PR 合并 CLI | 未配 | 工单卡在"PR 已过 CR，本部署没配合并 CLI" |
+| 多仓支持（C） | 方案已定 | 见 `docs/013-multi-repository.md`，五阶段 |
+
+## 环境事实（关键）
+
+| 项 | 值 |
+|---|---|
+| 客户端编排器 | 端口每次启动变，探测方式见下；状态库 `C:/Users/Lenovo/.dsh/state/superagent` |
+| 开发实例 | 固定 3082，状态库 `.../state/superagent-dev`，`python scripts\dsh-superagent start/stop/status` |
+| 探测编排器 | 遍历监听端口 GET `http://127.0.0.1:<port>/orchestrator/api/state`，header `x-orchestrator-request: 1` |
+| **禁止** | 在客户端跑着时启动独立服务会抢锁；面板/接口改配置优先，别直接写 sqlite |
+| 面板 | 侧栏 **Superagent** → tab：概览/来源/触发/评估/执行/**调度者**/设置 |
+| 浏览器验证 | Chrome `C:\Users\Lenovo\AppData\Local\Google\Chrome\Application\chrome.exe`，playwright-core 在 `~/.dsh-browser/node_modules` |
+| 面板选择器 | 侧栏按钮文本 `Superagent`；tab 用 `getByRole('tab', {name:'调度者'})`；输入框 `[data-composer-input]`；发送 `button.uV2eYG_primary` 或 Enter |
+
+## 踩过的坑（别再踩）
+
+1. **kv 不能写裸空串**：`Store.get` 会 `JSON.parse`，空串让插件启动即崩 → 清空用 `store.delete`
+2. **claim 到跨进程会话会起不来**：`ensure()` 无法把已有会话挪进 `masterDirectory` → 初始化回落到默认并记 `claimFallback`
+3. **对话中途重启 = 400**：工具被标 `deferLoading`，全延迟加载被 API 拒 → `setTimeout(restart, 15s)`
+4. **插件必须声明 `inject: ['orchestrator']`**，否则 `cannot get property "orchestrator" without inject`，日志表现为 `N entries did not activate`
+5. **`ChannelRef` 必须有 `thread`**，只有 `source + address` 编译不过
+6. **README 里的 PowerShell 坑**：中文全角引号会让解析失败；`.Replace()` 里嵌 `-replace` 会当成第三个参数报错，要先算成变量
+
+## 下一件事
+
+`docs/013` **阶段 1**：`Ticket` 加 `repository` 字段，缺省回落配置的默认仓，迁移既有工单。只加字段、不改行为，可单独回滚。
