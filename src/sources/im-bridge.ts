@@ -76,9 +76,9 @@ export function imTrigger(message: ImMessage, bridge: string, args: string[]): T
 const rest = async (ms: number, signal: AbortSignal): Promise<void> => { await delay(ms, undefined, { signal }).catch(() => { /* aborted */ }) }
 
 /** Names the instance on a Trigger's Channel when it is not the kind's default one, so admission resolves that instance's chats. */
-const stampInstance = <T extends { channel?: { address: Record<string, string> } }>(trigger: T, instance: string): T =>
+const stampInstance = <T extends { channel?: { address: Record<string, string> }; meta?: Record<string, unknown> }>(trigger: T, instance: string): T =>
   instance === 'im' || !trigger.channel ? trigger
-    : { ...trigger, channel: { ...trigger.channel, address: { ...trigger.channel.address, instance } } }
+    : { ...trigger, meta: { ...trigger.meta, instance }, channel: { ...trigger.channel, address: { ...trigger.channel.address, instance } } }
 
 /** Runs the bridge for as long as the Source is on, restarting it with a bounded backoff when it exits. */
 export async function runIm(ctx: SourceContext, signal: AbortSignal, instance = 'im'): Promise<void> {
@@ -129,7 +129,9 @@ function listen(ctx: SourceContext, config: ImConfig, signal: AbortSignal, insta
     ctx.report('im', { state: 'ready', detail: `The bridge runs ${config.command}`, at: new Date().toISOString() })
     let queue = Promise.resolve()
     const lines = createInterface({ input: child.stdout })
-    lines.on('line', (line: string) => { queue = queue.then(() => ingest(ctx, config, line, instance)).catch(() => { /* a bad line never stops the bridge */ }) })
+    lines.on('line', (line: string) => {
+      queue = queue.then(() => ingest(ctx, config, line, instance)).catch(error => { console.error(`[im] ${instance} ingest failed ${String(error)}`) })
+    })
   })
 }
 
