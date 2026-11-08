@@ -164,3 +164,25 @@ ctx.effect(() => ctx.orchestrator.sources.register(feishuKind), 'feishu: source 
 **实机**：开发实例同时跑 `im` 与 `im-2`（两个钉钉机器人、两个桥进程、各自凭据），均为 `ready`。
 
 **未验证**：两个机器人各收到一条消息的实测（需要人分别在群里 @ 它们）。
+
+## 已知缺陷：线程键不含仓库（2026-11-08 实测）
+
+第二个仓的 issue #5 被发现后，判定记录的线程键是：
+
+```
+thread = github:5
+```
+
+`githubChannel()` 只用编号拼线程（`src/sources/github-trigger.ts:9`）。多仓下的后果：
+
+- 仓 A 的 #5 与仓 B 的 #5 落到**同一条 Thread**，描述、订阅、回复地址都会互串
+- 工单虽然记了自己的 `repository`，但 Thread 是共享的，回话会走 `trigger.channel.address`——那里带的仓可能来自另一条线
+
+**修法**（未实施）：线程键带仓，但默认仓保持原格式以兼容既有数据：
+
+```
+默认仓      github:<number>
+其它仓      github:<owner>/<name>#<number>
+```
+
+要改的位置：`githubChannel`（加可选 repository）、`github.ts` 里 `ctx.threads.patch/describe` 的几处硬编码、`github-pull.ts` 两处、`migration.ts` 一处。改动面 5 个文件，且涉及既有线程键的兼容，需单独一轮并迁移验证。
