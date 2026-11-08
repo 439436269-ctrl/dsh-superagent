@@ -74,7 +74,7 @@ export class Runtime extends Service implements SourceHost {
   readonly ready: Promise<void>
   private readonly board = new HealthBoard()
   private readonly runtimeHealth = this.board.claim('runtime', { state: 'starting', detail: '' })
-  readonly masterId: string
+  masterId: string
   private readonly sourceLinks = new TextCache(200_000)
   private readonly stopped = new AbortController()
   private readonly disposers: (() => void)[] = []
@@ -91,7 +91,12 @@ export class Runtime extends Service implements SourceHost {
     const bus = this.toolHost.bus
     if (!bus.dsh) return []
     const live = await bus.dsh.live(AbortSignal.timeout(5000)).catch(() => [])
-    return live.map(item => ({ id: item.sessionId, running: item.running, cwd: item.cwd ?? '' }))
+    // Only Sessions already in masterDirectory: ensure() cannot move an existing Session into another workspace, and
+    // choosing one it cannot move would leave the plugin unable to start.
+    // Paths arrive with mixed separators (the config uses forward slashes, live Sessions report backslashes).
+    const here = (path: string): string => path.replace(/\\\\/g, '/').toLowerCase().replace(/\/+$/, '')
+    return live.filter(item => !item.cwd || here(item.cwd) === here(this.machine.masterDirectory))
+      .map(item => ({ id: item.sessionId, running: item.running, cwd: item.cwd ?? '' }))
   }
   async dispatcher(): Promise<{ id: string; available: boolean; running: boolean }> {
     const bus = this.toolHost.bus
@@ -104,10 +109,16 @@ export class Runtime extends Service implements SourceHost {
    * plugin restarts so the new main Session is resolved and decorated before the next Trigger arrives.
    */
   setDispatcher(id: string | null): { dispatcher: string } {
-    this.store.set(KV.runtime.dispatcher, id ?? '')
+    // The store parses every value as JSON, so an empty string would break the next start; clearing records the
+    // derived default instead, which also reads back as the default rather than as a claim.
+    this.store.set(KV.runtime.dispatcher, id ?? this.defaultMasterId)
     this.restart()
     return { dispatcher: id ?? '' }
   }
+  /** The id derived from the directories: what the dispatcher is when nobody has claimed it. */
+  private defaultMasterId = ''
+  /** Why a claimed dispatcher was dropped at startup, so the panel can say it instead of failing silently. */
+  claimFallback?: string
   private readonly toolHost: MainToolsHost & ExecutorToolsHost
   /** Non-zero while a main-Session tool is executing an Engine command, suppressing self-triggered domain event notices. */
   private quiet = 0
@@ -136,6 +147,7 @@ export class Runtime extends Service implements SourceHost {
       // A claimed Session wins over the derived one, so a person can put the dispatcher where they can watch it. An id
       // that no longer resolves falls back to the default and is forgotten, rather than leaving the agent without one.
       const claimed = store.get(KV.runtime.dispatcher)
+      this.defaultMasterId = derived
       const masterId = this.masterId = claimed || (stored === derived ? stored : derived)
       store.set(KV.runtime.masterId, masterId)
       const commands = this.commands = new Commands(() => setup.deployment, setup.commandEnvironment, this.lifetime)
@@ -248,7 +260,17 @@ export class Runtime extends Service implements SourceHost {
     }
     this.sessions.install()
     this.executor.install()
-    await this.sessions.ensure(this.masterId, this.machine.masterDirectory, 'dsh-superagent orchestrator', 'orchestrator')
+    try {
+      await this.sessions.ensure(this.masterId, this.machine.masterDirectory, 'dsh-superagent orchestrator', 'orchestrator')
+    } catch (error) {
+      // A claimed Session that cannot be adopted (it lives in another workspace, so ensure() cannot move it) must not
+      // keep the whole Host down: forget the claim, fall back to the derived default, and record that it happened.
+      if (!this.store.get(KV.runtime.dispatcher)) throw error
+      this.store.set(KV.runtime.dispatcher, this.defaultMasterId)
+      this.masterId = this.defaultMasterId
+      this.claimFallback = error instanceof Error ? error.message : String(error)
+      await this.sessions.ensure(this.defaultMasterId, this.machine.masterDirectory, 'dsh-superagent orchestrator', 'orchestrator')
+    }
     for (const id of this.settings.syncable()) await this.settings.sync(id).catch(() => { /* sync() records its failure in health. */ })
     // If stop() was called while awaiting setup, session creation, or policy sync, do not start background loops.
     if (this.closing()) return
