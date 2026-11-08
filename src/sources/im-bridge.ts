@@ -76,9 +76,11 @@ export function imTrigger(message: ImMessage, bridge: string, args: string[]): T
 const rest = async (ms: number, signal: AbortSignal): Promise<void> => { await delay(ms, undefined, { signal }).catch(() => { /* aborted */ }) }
 
 /** Names the instance on a Trigger's Channel when it is not the kind's default one, so admission resolves that instance's chats. */
-const stampInstance = <T extends { channel?: { address: Record<string, string> }; meta?: Record<string, unknown> }>(trigger: T, instance: string): T =>
+const stampInstance = <T extends { id: string; channel?: { address: Record<string, string> }; meta?: Record<string, unknown> }>(trigger: T, instance: string): T =>
   instance === 'im' || !trigger.channel ? trigger
-    : { ...trigger, meta: { ...trigger.meta, instance }, channel: { ...trigger.channel, address: { ...trigger.channel.address, instance } } }
+    : { ...trigger, id: `${trigger.id}#${instance}` as typeof trigger.id,
+        meta: { ...trigger.meta, instance },
+        channel: { ...trigger.channel, address: { ...trigger.channel.address, instance } } }
 
 /** Runs the bridge for as long as the Source is on, restarting it with a bounded backoff when it exits. */
 export async function runIm(ctx: SourceContext, signal: AbortSignal, instance = 'im'): Promise<void> {
