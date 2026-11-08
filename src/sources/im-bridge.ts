@@ -114,7 +114,7 @@ function listen(ctx: SourceContext, config: ImConfig, signal: AbortSignal, insta
   const args = [...splitArgs(config.args), 'receive']
   return new Promise((resolve, reject) => {
     // This instance's own environment comes last, so it can override a shared credential without touching the service.
-  const child = spawn(config.command, args, { stdio: ['ignore', 'pipe', 'pipe'], windowsHide: true, env: { ...process.env, ...config.env } })
+  const child = spawn(config.command, args, { stdio: ['ignore', 'pipe', 'pipe'], windowsHide: true, env: (() => { const env = { ...process.env, ...config.env }; console.error(`[im] ${instance} effective client=${(env.DINGTALK_CLIENT_ID ?? "(none)").slice(-6)}`); return env })() })
     let settled = false
     let stderr = ''
     const finish = (error?: Error): void => {
@@ -127,7 +127,7 @@ function listen(ctx: SourceContext, config: ImConfig, signal: AbortSignal, insta
     signal.addEventListener('abort', kill, { once: true })
     child.on('error', (error: Error) => finish(error))
     child.on('exit', (code, signalName) => finish(code === 0 || signal.aborted ? undefined : new Error(`the bridge exited with ${code ?? signalName}${stderr ? `: ${stderr.trim()}` : ''}`)))
-    child.stderr.on('data', (chunk: Buffer) => { stderr = (stderr + chunk.toString()).slice(-1000) })
+    child.stderr.on('data', (chunk: Buffer) => { stderr = (stderr + chunk.toString()).slice(-1000); console.error(`[im] ${instance} stderr ${chunk.toString().trim().slice(0, 200)}`) })
     ctx.report('im', { state: 'ready', detail: `The bridge runs ${config.command}`, at: new Date().toISOString() })
     let queue = Promise.resolve()
     const lines = createInterface({ input: child.stdout })
@@ -146,7 +146,8 @@ async function ingest(ctx: SourceContext, config: ImConfig, line: string, instan
   if (message.success) {
     const trigger = imTrigger(message.data, config.command, splitArgs(config.args))
     if (!trigger) return
-    await ctx.receive(stampInstance(trigger, instance))
+    const received = await ctx.receive(stampInstance(trigger, instance))
+    console.error(`[im] ${instance} receive=${JSON.stringify(received)}`)
     if (message.data.chatName) labels(ctx, { [message.data.chat]: message.data.chatName })
     ctx.threads.describe(`${SOURCE}:${message.data.chat}`, { label: message.data.chatName ?? message.data.chat })
     return
