@@ -111,8 +111,18 @@ export const inject = ['orchestrator']
 export function apply(ctx: Context): void {
   ctx.effect(() => ctx.orchestrator.sources.register(imKind), 'im: source kind')
   ctx.effect(() => {
-    const controller = new AbortController()
-    const running = runIm(sourceContext(ctx.orchestrator, imKind), controller.signal)
-    return async () => { controller.abort(); await running }
+    // One loop per instance of this kind: each bridge reads its own configuration, so two chat tools never share a
+    // process, a cursor, or credentials.
+    const instances = ctx.orchestrator.sources.instances().filter(instance => instance.kind === imKind.kind)
+    const controllers: AbortController[] = []
+    const running = instances.map(instance => {
+      const controller = new AbortController()
+      controllers.push(controller)
+      return runIm(sourceContext(ctx.orchestrator, imKind, instance.id), controller.signal)
+    })
+    return async () => {
+      for (const controller of controllers) controller.abort()
+      await Promise.allSettled(running)
+    }
   })
 }

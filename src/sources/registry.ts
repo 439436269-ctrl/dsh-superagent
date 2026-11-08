@@ -53,7 +53,7 @@ export class SourceRegistry implements SourceScope {
     }
     const installed = [...this.kinds.values()].sort((a, b) => a.kind.localeCompare(b.kind))
       .flatMap(kind => (idsOf.get(kind.kind) ?? [kind.kind]).sort().map(id => ({ ...this.resolve(kind, settings.sources[id]), id, installed: true })))
-    const orphaned = entries.filter(([, stored]) => !this.kinds.has(stored.kind ?? ""))
+    const orphaned = entries.filter(([id, stored]) => !this.kinds.has(stored.kind ?? id))
       .map(([id, stored]) => ({ id, kind: stored.kind ?? id, enabled: stored.enabled, config: stored.config, installed: false }))
     return [...installed, ...orphaned]
   }

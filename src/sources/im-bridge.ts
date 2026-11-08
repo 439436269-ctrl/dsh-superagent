@@ -80,7 +80,8 @@ export async function runIm(ctx: SourceContext, signal: AbortSignal): Promise<vo
   await ctx.ready
   let failures = 0
   while (!signal.aborted) {
-    const config = ctx.config<ImConfig>(SOURCE)
+    // The context is bound to one instance, so this reads that instance's configuration rather than the kind's first.
+  const config = ctx.config<ImConfig>()
     if (!config?.command) {
       ctx.report('im', { state: 'paused', detail: 'The IM Source has no bridge command' })
       await rest(5000, signal)
