@@ -154,3 +154,11 @@ github-stream:…superagent-second:issues       since 14:36:02（第二仓）
 遗留观察：
 - PR #18 合并后工单仍显示 `working`（下轮确认是否推进到结束）
 - `POST /tickets/:id/stop` 对空 id 返回 404；`GET /tickets` 曾在工单 ended 时返回 0 条，原因未确认
+
+## 2026-11-08 23:45：多源最后一个代码缺陷未修
+
+已修的关键 bug：`Runtime.context` 丢掉实例 id，导致**同一 kind 的每个实例都拿到第一个实例的配置**——三个 `im` 实例全跑第一个桥的脚本。修复后进程参数与配置一一对应（`im`/`im-2` = dingtalk-stream，`im-3` = wecom）。
+
+未修：健康条目按实例区分（两次尝试，`sources.spec` 6→9 回归，已回滚）。改法与正确顺序见 `docs/013`。
+
+其余状态：多仓闭环已实测；多源各实例独立运行已实测；缺「第二个机器人收到一条消息」的人工触发。
