@@ -270,3 +270,23 @@ for (const number of numbers) { const pr = await pull(ctx, round, number) }   //
 「`@yoga-dsh小钉` 的消息进到 `im-2`」——需要在钉钉群里由人 @ 一次。这一次没有任何自动化替代方案：Stream 是实时长连接，补发无效。
 
 **为什么不能靠"代码看起来对"顶替**：多源最容易出的错恰好在运行时——两个实例共用一个游标、一个进程、一份凭据。前两者已用进程与计数证明，第三项用「同群只到其一」证明；只有"第二个机器人真的收到过一条"仍需一次人工触发。
+
+## 未完成：健康条目按实例区分（2026-11-08 23:45）
+
+现状：`report()` 写入的健康条目按 **kind 名**登记，三个 `im` 实例共用一个 `im` 槽，最后写入者覆盖，`/sources` 里三个实例显示同一条文案——**看不出哪个实例健康**。
+
+两次尝试都失败并回滚：
+
+| 尝试 | 做法 | 失败原因 |
+|---|---|---|
+| 1 | 在 `runIm` 里给 detail 加 `[instance]` 前缀 | 真正写这条文案的是 `runBridge`（在 `runIm` 作用域外），前缀没生效 |
+| 2 | `healthEntries` 按需创建 `im:im-2` 分槽 + `report` 映射到分槽 | 功能生效，但 `sources.spec` 从 6 → **9** 失败 |
+
+第 2 次的 3 个新失败说明这是**接口约定变更**：既有测试断言「一个 kind 一组健康条目」。正确顺序应是：
+
+1. 先改测试，明确「每个实例一组健康条目」是新约定
+2. 改 `registry.register`：为每个实例的 `kind.health` 声明条目（默认实例用原名，其余 `name:instance`）
+3. `sourceContextOf` 绑定实例后把 `report(name)` 映射到该实例的槽
+4. 面板与 `/sources` 按实例列出
+
+改哪三处：`src/sources/registry.ts`（`register` 与 `healthEntries`）、`src/app/source-context.ts`（`health` 与 `report`）、`tests/sources.spec.ts`（健康条目预期）。
