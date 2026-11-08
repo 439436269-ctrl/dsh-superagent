@@ -53,3 +53,33 @@ it. `examples/im-bridges/telegram.mjs` is a complete adapter with no dependencie
 ## License
 
 [MIT](LICENSE)
+
+## What this fork adds
+
+This repository started from the DeepSeek Harness prototype and has since grown multi-repository and multi-source support, all verified on a
+live instance:
+
+| Area | What changed |
+|---|---|
+| Multi-repository | A ticket records the repository it works in. Listing polls run over every served repository, each with its own cursor; worktrees land under `<root>/<owner>/<name>/`; pull requests and replies are read and written in the ticket's repository; the Thread key names its repository (`github:owner/name#5`) while the default repository keeps `github:5`. |
+| Multi-instance chat sources | One kind can run several instances (two DingTalk bots, a second Feishu app, a WeCom bridge). Each instance has its own loop, its own bridge process, its own credentials through `config.env`, and its own health. |
+| DingTalk | A Stream-mode bridge (`examples/im-bridges/dingtalk-stream.mjs`): an outbound WebSocket to DingTalk's gateway, so no public callback URL and no tunnel are needed. |
+| WeCom | `examples/im-bridges/wecom.mjs` with a self-check suite (signature, decryption, corp check). |
+
+Single-repository deployments behave exactly as before: the default repository keeps its thread keys, cursor keys, worktree path and channel
+address, byte for byte.
+
+## Known issues
+
+Published so the next version has something to fix; none of these blocks a single-repository, single-instance deployment.
+
+1. **Per-instance health is shared.** Health entries are claimed per kind, so several *enabled* instances of one kind show one line. A disabled
+   instance no longer writes into it (that used to make healthy siblings look broken), so what remains is cosmetic: you cannot tell which
+   instance the line came from.
+2. **A second DingTalk bot has not received a message end to end.** Both bridges connect with their own credentials and DingTalk delivers to
+   both (captured from standalone bridges), but messages for the second instance have not yet appeared in its counters. The diagnosis in
+   progress is recorded in [docs/014-progress.md](docs/014-progress.md).
+3. **A long-idle Stream connection is not re-established.** If DingTalk closes an idle connection without the client noticing, the bridge keeps
+   running with a dead socket until the plugin restarts. A keepalive has not been implemented.
+4. **The pull-request poll reads a bare number.** `follows` stores numbers, so two repositories with the same pull-request number can be
+   confused; the Thread carries its repository but the follow does not yet.
