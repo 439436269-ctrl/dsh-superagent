@@ -98,11 +98,11 @@ export class Runtime extends Service implements SourceHost {
     return live.filter(item => !item.cwd || here(item.cwd) === here(this.machine.masterDirectory))
       .map(item => ({ id: item.sessionId, running: item.running, cwd: item.cwd ?? '' }))
   }
-  async dispatcher(): Promise<{ id: string; available: boolean; running: boolean }> {
+  async dispatcher(): Promise<{ id: string; available: boolean; running: boolean; note?: string }> {
     const bus = this.toolHost.bus
     if (!bus.dsh) return { id: this.masterId, available: false, running: false }
     const live = await bus.dsh.live(AbortSignal.timeout(5000)).catch(() => [])
-    return { id: this.masterId, available: true, running: live.find(item => item.sessionId === this.masterId)?.running ?? false }
+    return { id: this.masterId, available: true, running: live.find(item => item.sessionId === this.masterId)?.running ?? false, note: this.claimFallback }
   }
   /**
    * Records the Session that should judge and assign work, or clears the record so the default one is used again. The

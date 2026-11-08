@@ -28,6 +28,7 @@ export function DispatcherPage() {
           <span className="dt-stat-value">{data.running ? t('dispatcherRunning') : t('dispatcherIdle')}</span></span>
       </div>
       {!data.available && <Hint>{t('dispatcherNone')}</Hint>}
+      {data.note && <Hint>{data.note}</Hint>}
     </Section>
     <Section title={t('dispatcherChange')}>
       {sessions.length === 0 ? <Hint>{t('dispatcherNoSessions')}</Hint>

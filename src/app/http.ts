@@ -30,7 +30,7 @@ import { executorLoad, ticketDetail, ticketList } from './views/tickets.ts'
 
 export interface HttpHost {
   /** The Session that judges and assigns work, and whether this Host can reach it. */
-  dispatcher(): Promise<{ id: string; available: boolean; running: boolean }>
+  dispatcher(): Promise<{ id: string; available: boolean; running: boolean; note?: string }>
   /** Records the Session that judges and assigns work; null clears it back to the default. */
   setDispatcher(id: string | null): { dispatcher: string }
   /** Sessions this Host can name as the dispatcher. */
