@@ -92,10 +92,19 @@ export class Runtime extends Service implements SourceHost {
     const live = await bus.dsh.live(AbortSignal.timeout(5000)).catch(() => [])
     return { id: this.masterId, available: true, running: live.find(item => item.sessionId === this.masterId)?.running ?? false }
   }
+  /**
+   * Records the Session that should judge and assign work, or clears the record so the default one is used again. The
+   * plugin restarts so the new main Session is resolved and decorated before the next Trigger arrives.
+   */
+  setDispatcher(id: string | null): { dispatcher: string } {
+    this.store.set(KV.runtime.dispatcher, id ?? '')
+    this.restart()
+    return { dispatcher: id ?? '' }
+  }
   private readonly toolHost: MainToolsHost & ExecutorToolsHost
   /** Non-zero while a main-Session tool is executing an Engine command, suppressing self-triggered domain event notices. */
   private quiet = 0
-  constructor(ctx: Context, readonly machine: Machine, restart: () => void) {
+  constructor(ctx: Context, readonly machine: Machine, private readonly restart: () => void) {
     super(ctx, 'orchestrator')
     const runtime = this
     // Lock the state directory before opening the database so another process cannot migrate or write concurrently.
@@ -117,7 +126,10 @@ export class Runtime extends Service implements SourceHost {
       const located = machine.masterDirectory === machine.stateDir ? machine.stateDir : `${machine.stateDir}|${machine.masterDirectory}`
       const derived = `orchestrator-${key(located)}`
       const stored = store.get(KV.runtime.masterId)
-      const masterId = this.masterId = stored === derived ? stored : derived
+      // A claimed Session wins over the derived one, so a person can put the dispatcher where they can watch it. An id
+      // that no longer resolves falls back to the default and is forgotten, rather than leaving the agent without one.
+      const claimed = store.get(KV.runtime.dispatcher)
+      const masterId = this.masterId = claimed || (stored === derived ? stored : derived)
       store.set(KV.runtime.masterId, masterId)
       const commands = this.commands = new Commands(() => setup.deployment, setup.commandEnvironment, this.lifetime)
       const board = this.board
@@ -245,7 +257,7 @@ export class Runtime extends Service implements SourceHost {
       get deployment() { return setup.deployment },
       get setupProblem() { return setup.problem }, get feishuProblem() { return setup.feishuProblem },
       configured: () => setup.configured(), links: () => runtime.links(), ticketEnvironment: ticket => runtime.ticketEnvironment(ticket),
-      checkSetup: () => { setup.check() }, requestPass: () => { passes.request() }, models: () => this.ctx.sessionController.modelCatalog(), dispatcher: () => this.dispatcher() }
+      checkSetup: () => { setup.check() }, requestPass: () => { passes.request() }, models: () => this.ctx.sessionController.modelCatalog(), dispatcher: () => this.dispatcher(), setDispatcher: (id: string | null) => this.setDispatcher(id) }
   }
   /** Idempotent stop; concurrent or repeated calls share the same shutdown promise. */
   stop(): Promise<void> { return this.stopping ??= this.shutdown() }
