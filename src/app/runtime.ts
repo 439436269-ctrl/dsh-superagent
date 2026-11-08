@@ -40,6 +40,7 @@ import { Passes } from './passes.ts'
 import { Setup } from './setup.ts'
 import { feishuSettings } from '../sources/feishu.ts'
 import { health, type Health, type SourceContext, type SourceHost } from '../sources/host.ts'
+import { sessionTrigger, setSessionDeliver } from '../sources/session.ts'
 import { Sessions } from './sessions.ts'
 import { Settings } from './settings.ts'
 import { sourceContextOf, type SourceContextDeps } from './source-context.ts'
@@ -112,6 +113,13 @@ export class Runtime extends Service implements SourceHost {
     const bus = this.toolHost.bus
     if (!bus.dsh) throw new Error('This Host exposes no Session service, so the dispatcher cannot be reached')
     if (from === this.masterId) throw new Error('This Session is the dispatcher; ask it in words instead')
+    if (intent === 'delegate') {
+      // A delegation is work that has already been decided: it enters through the same pipeline as a chat message, so
+      // admission, assessment and ticketing behave exactly as they do for every other Source.
+      const context = this.context({ kind: 'session', health: [] })
+      const result = await context.receive(sessionTrigger({ session: from, id: `${Date.now()}`, text, intent }))
+      return { delivered: String((result as { triggerId?: string }).triggerId ?? from) }
+    }
     await bus.dsh.message(this.masterId, '[' + intent + ' from ' + from + ']\n\n' + text, signal)
     return { delivered: this.masterId }
   }
@@ -273,6 +281,12 @@ export class Runtime extends Service implements SourceHost {
       this.runtimeHealth.set({ ...health('paused', 'setupPending'), at: now() })
       return
     }
+    // Replies to a delegated Thread go back into the Session that sent it.
+    setSessionDeliver(async (session, text) => {
+      if (!this.toolHost.bus.dsh) return 'gone'
+      await this.toolHost.bus.dsh.message(session, text, AbortSignal.timeout(30_000))
+      return 'sent'
+    })
     this.sessions.install()
     this.executor.install()
     try {

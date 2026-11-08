@@ -5,10 +5,14 @@
  * (Trigger → admission → assessment → Ticket) instead of only messaging the dispatcher. The builders here are pure so
  * they can be tested without a Host.
  */
+import type { Context } from '@deepseek-ai/cordis'
 import { z } from 'zod'
 import type { Localized, SourceKind } from './kind.ts'
 
 export const SESSION_SOURCE = 'session'
+
+/** The Host service this plugin registers the kind on. */
+export const inject = ['orchestrator']
 
 const zh = (text: string): Localized => ({ zh: text, en: text })
 
@@ -16,7 +20,7 @@ const zh = (text: string): Localized => ({ zh: text, en: text })
 export const sessionThreadId = (session: string): string => `${SESSION_SOURCE}:${session}`
 
 /** The channel a reply goes to: the Session that sent the message. */
-export const sessionChannel = (session: string) => ({ source: SESSION_SOURCE, address: { session } })
+export const sessionChannel = (session: string) => ({ source: SESSION_SOURCE, thread: sessionThreadId(session), address: { session } })
 
 /**
  * Builds the Trigger for one delegation. `human` is true because a person drives that Session, and `addressed` is
@@ -37,6 +41,12 @@ export function sessionTrigger(input: { session: string; id: string; text: strin
   }
 }
 
+/** How a reply reaches a Session; set by the Runtime, which owns the Session service. */
+let deliver: ((session: string, text: string) => Promise<'sent' | 'gone'>) | undefined
+
+/** Wires the reply channel to the Session service; called once by the Runtime at start-up. */
+export const setSessionDeliver = (fn: typeof deliver): void => { deliver = fn }
+
 export const SessionConfigSchema = z.object({}).strict()
 
 export const sessionKind: SourceKind<Record<string, never>> = {
@@ -49,4 +59,19 @@ export const sessionKind: SourceKind<Record<string, never>> = {
   schema: SessionConfigSchema,
   fields: [],
   health: [],
+  // Replies go back into the Session that delegated the work. Without a delivery hook the kind reports `gone`, so a
+  // missing wiring shows up instead of silently dropping the answer.
+  channel: {
+    send: async (_host, message) => {
+      const session = String((message.channel as { address?: { session?: string } }).address?.session ?? '')
+      if (!session || !deliver) return 'gone' as const
+      return deliver(session, message.text)
+    },
+    link: () => ({ url: '', label: { zh: '会话', en: 'Session' } }),
+  },
+}
+
+/** Registers the kind; delegation traffic itself arrives through `Runtime.inbound`. */
+export function apply(ctx: Context): void {
+  ctx.effect(() => ctx.orchestrator.sources.register(sessionKind), 'session: source kind')
 }
