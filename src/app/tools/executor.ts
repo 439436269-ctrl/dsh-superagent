@@ -18,6 +18,8 @@ export interface ExecutorToolsHost {
   /** GitHub Source context whose pull-request rules govern claiming a reported PR. */
   readonly github: SourceContext
   sendReplies(): Promise<void>
+  /** Delivers one message into the dispatcher Session that owns this ticket. */
+  dispatcher(text: string, signal: AbortSignal): Promise<{ delivered: boolean }>
 }
 
 export function executorTools(host: ExecutorToolsHost, ticket: Ticket): Tool[] {
@@ -25,6 +27,12 @@ export function executorTools(host: ExecutorToolsHost, ticket: Ticket): Tool[] {
   return [
     readTool('Read one page of a resource of this ticket that the resource parameter lists. Follow next_offset, and next_resource where a page names one.',
       true, (resource, offset, limit, signal) => readResource(host.resources, resource, offset, limit, ticketId, signal)),
+    tool({
+      name: 'orchestrator_event',
+      description: 'Send one message to the dispatcher Session that owns this ticket, such as "this needs a decision on X" or "another ticket should own Y". It reaches the dispatcher as its own user would write it, so it can assign work; it does not change this ticket and it is not a report.',
+      schema: z.object({ text: z.string().trim().min(1).max(2000) }).strict(),
+      execute: async (args, signal) => ({ ...await host.dispatcher(args.text, signal), ticket_id: ticketId }),
+    }),
     tool({
       name: 'orchestrator_ack',
       description: 'Acknowledge one original human request before substantial work, as the replies section says; it posts as a reply to that message.',
