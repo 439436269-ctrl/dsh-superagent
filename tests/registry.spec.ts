@@ -169,7 +169,7 @@ describe('Source registry', () => {
     sources.register({
       kind: 'chat', title: { zh: '', en: '' }, description: { zh: '', en: '' }, health: [],
       schema: z.object({ chat: z.string() }).strict(), fields: [],
-      channel: { allowed: (address, config) => address.chat === (config as { chat: string }).chat, send: async () => 'sent' as const, link: () => ({ url: '', label: '' }) },
+      channel: { allowed: (address, config) => address.chat === (config as { chat: string }).chat, send: async () => 'sent' as const, link: () => ({ url: '', label: { zh: '', en: '' } }) },
     } as SourceKind<{ chat: string }>)
     expect(sources.channelAllowed({ source: 'chat', address: { chat: 'A' } })).toBe(true)
     expect(sources.channelAllowed({ source: 'chat', address: { chat: 'B' } })).toBe(false)
