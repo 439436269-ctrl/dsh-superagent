@@ -99,3 +99,36 @@ instances(settings) {
 3. 多仓阶段 3–5
 
 阶段 2 因此不只是多仓的一步，也是多源的探路。
+
+## 多源：真正的障碍在 `SourceContext.config`（2026-11-08 补）
+
+上一节列了六层改动。实际动手前又确认了一处**更硬**的耦合：
+
+```ts
+// src/sources/host.ts:40
+config<C extends Record<string, unknown>>(kind: string): C | undefined
+```
+
+来源插件拿配置的方式是 **`ctx.config(kind)`** —— 按 **kind 名**取，不是按实例 id。而每个 kind 的插件在 `apply` 里只注册一次自我：
+
+```ts
+ctx.effect(() => ctx.orchestrator.sources.register(feishuKind), 'feishu: source kind')
+```
+
+所以同一个 kind 的第二个实例，会拿到的仍是**第一个实例的配置**。这不是加个 `kind` 字段能解决的，而是要把 **实例 id 贯穿到 `SourceContext`**：
+
+1. `SourceInstanceSchema` 加 `kind`（缺省 = 键名）
+2. `SourceRegistry.instances()` 按 kind 归组，允许一个 kind 多个实例
+3. `SourceContext` 增加实例 id，`config()` 改为按实例取
+4. 每个 kind 的插件从"注册一个 kind"改为"注册 kind，并按实例启动循环"
+5. patch 条目可用不同 id 声明同一 kind
+6. 面板：实例列表 + 新增/删除
+7. 迁移：`{ github: {...} }` → `{ github: { kind: 'github', ... } }`，id 沿用 kind
+
+第 3、4 条是主体：它改变的是"插件与配置的绑定方式"，影响所有 kind（`github`、`feishu`、`im`）。
+
+## 结论
+
+多源不能靠改 schema 完成，需要一次**贯穿 SourceContext 的改造**。在此之前，可行的是：
+- 同一 kind 只跑一个实例（今天的状态）
+- 不同 kind 可以同时跑（飞书 + 钉钉 + IM，已验证 `im` 与 `feishu` 并存）
