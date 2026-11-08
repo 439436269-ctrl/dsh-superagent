@@ -45,7 +45,8 @@ export function ticketRow(view: Snapshot, ticket: Ticket) {
   const line = ticketLine(view, ticket)
   const channel = ticket.channels[0]
   const reply = line.stage === 'person' && channel ? channelLink(view, channel) : undefined
-  return { ...line, ...reply ? { reply } : {} }
+  // A ticket that works in a particular repository says so, so the panel can tell two repositories apart.
+  return { ...line, ...(ticket.repository ? { repository: ticket.repository } : {}), ...reply ? { reply } : {} }
 }
 /** Executor slot utilization: `running` worker Sessions in an active turn (which occupy slots and are interrupted by a restart), and tickets `queued` for a slot. */
 export interface ExecutorLoad { running: number; queued: number }
