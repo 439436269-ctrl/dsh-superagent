@@ -199,3 +199,37 @@ thread = github:5
 实测（开发实例）：第二个仓的 issue 产生 `thread=github:439436269-ctrl/superagent-second#6`，默认仓的旧线程 `github:5` 不受影响。
 
 改法只在 `stamped()` 一处（三份），**没有改任何函数签名**——上一轮尝试在行内做字符串替换，把合法的模板字符串吞掉了，已回滚；最终用「Node 脚本按行号 splice」完成。
+
+## 端到端实测通过（2026-11-08 23:30）
+
+全部发生在第二个仓 `439436269-ctrl/superagent-second`：
+
+| 环节 | 证据 |
+|---|---|
+| 发现 | issue #17 被列表轮询发现（`fetched=2`，另一条是 agent 自己开的 #10，被 `own` 正确跳过） |
+| 判定 | `accept`，理由「Explicit, fully specified one-word typo correction in a comment」 |
+| 工单 | `ticket.repository = "439436269-ctrl/superagent-second"` |
+| worktree | `E:\codes\superagent-sandbox\439436269-ctrl\superagent-second\fix-comment-typo-f133df157ac0` |
+| PR | `https://github.com/439436269-ctrl/superagent-second/pull/18`，分支 `agent/fix-comment-typo-f133df157ac0`，改 `src/greet.js`，已合并 |
+| 回复 | issue #17 上一条 VFVrPQ 评论 |
+
+过程中修掉的真 bug（都是单仓部署看不出来的）：
+
+1. `deployment.repositories` 从未被填充，轮询只扫默认仓 → 改为读来源配置的 `repositories`
+2. `served` 用「有额外仓就替换」的写法，把默认仓挤出了轮询
+3. 把游标名当流 id 传，`id === 'issues'` 判断失败，流退化成 `comments` 分支
+4. 304 提前 return，坏游标永远修不好
+5. 线程键只用编号（两个仓的同号 issue 撞车）
+6. 线程回读用默认仓的 Commands（读到另一个仓的同号 issue）
+7. `Ticket.repository` 算出来却没放进工单对象
+8. 工单行不输出 `repository`（面板与接口看不到）
+
+## 排查教训（值得记住）
+
+先后有 **五轮** 误判"轮询坏了"，实际都是测试数据的问题：
+
+- PowerShell 发中文 JSON 变成 `?` → 模型判 `unavailable`（判断正确）
+- 用 agent 账号开 issue → 被 `sameName(user.login, login)` 正当跳过
+- 同仓同类请求 → 被已有工单判为重复（合理）
+
+**先确认测试数据本身有效，再怀疑实现。**

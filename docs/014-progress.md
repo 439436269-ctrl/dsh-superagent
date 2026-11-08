@@ -142,3 +142,15 @@ github-stream:…superagent-second:issues       since 14:36:02（第二仓）
 2. 记录 `readStream` 的 HTTP 状态码（200/304）与返回条数
 3. 若确认轮询在跑但接口一直 304，检查 `conditional`（`If-None-Match`）与 `since` 的配合是否让 GitHub 复用了旧 etag
 4. 万不得已：重置 `C:/Users/Lenovo/.dsh/state/superagent-dev`（开发沙箱，无真实数据），从干净状态重跑
+
+## 2026-11-08 23:30：多仓闭环
+
+目标 1（多仓五阶段）**端到端实测通过**，详见 `docs/013` 的「端到端实测通过」一节。关键提交：
+
+`bfc7a41` 工单记仓 · `38d0347`…`b43b84a` 多仓监听与 PR 归属 · `6af3800` `06a4db9` `78508c3` 环境与 worktree · `0c85f8b` `941f624` `f70e19c` 回复与读 PR 按仓 · `29fe6c8` 面板仓库字段 · `4634438` 线程键带仓 · `9f8113c` 线程回读按仓 · `c5aa44b` 列表轮询按仓 · `4cd01e2` 默认仓不被挤出 · `ccb22fc` 工单落库 repository · `22bbe35` 行展示 repository
+
+多源（目标 2）能力完成，实机两个钉钉机器人各自跑独立桥进程；**缺**：两个机器人各收一条消息的实测。
+
+遗留观察：
+- PR #18 合并后工单仍显示 `working`（下轮确认是否推进到结束）
+- `POST /tickets/:id/stop` 对空 id 返回 404；`GET /tickets` 曾在工单 ended 时返回 0 条，原因未确认
