@@ -45,7 +45,7 @@ export class Tickets extends EnginePart {
     const declared = primary?.meta.repository
     const repository = typeof declared === 'string' && declared.trim() ? declared.trim() : undefined
     let ticket: Ticket = { id, title: outcome.title, decisionId, mandate, channels: [], assignments: [], inputs: [], undelivered: [],
-      createdAt: at, updatedAt: at, origin }
+      createdAt: at, updatedAt: at, origin, ...(repository ? { repository } : {}) }
     for (const triggerId of triggerIds) {
       const channel = this.repo.triggers.get(triggerId)?.channel
       if (channel && !ticket.channels.some(item => sameChannel(item, channel))) ticket.channels.push(channel)
