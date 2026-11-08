@@ -117,8 +117,10 @@ export class Runtime extends Service implements SourceHost {
       // A delegation is work that has already been decided: it enters through the same pipeline as a chat message, so
       // admission, assessment and ticketing behave exactly as they do for every other Source.
       const context = this.context({ kind: 'session', health: [] })
-      const result = await context.receive(sessionTrigger({ session: from, id: `${Date.now()}`, text, intent }))
-      return { delivered: String((result as { triggerId?: string }).triggerId ?? from) }
+      const trigger = sessionTrigger({ session: from, id: `${Date.now()}`, text, intent })
+      await context.receive(trigger)
+      // The Trigger id is what the caller can follow up on; receive() does not return it.
+      return { delivered: trigger.id }
     }
     await bus.dsh.message(this.masterId, '[' + intent + ' from ' + from + ']\n\n' + text, signal)
     return { delivered: this.masterId }
