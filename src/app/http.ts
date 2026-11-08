@@ -210,12 +210,14 @@ function routes(runtime: HttpHost): Routes {
       if (block.startsWith('source:')) {
         const id = block.slice('source:'.length)
         const exists = runtime.sources.instances().some(instance => instance.id === id)
+        const current = runtime.sources.instances().find(instance => instance.id === id)
         // A second instance of a running kind does not exist yet when it is first saved, so the request has to say which
         // kind it runs; an existing instance is known already and keeps the check below for typos.
         const declares = typeof (request.value as { kind?: unknown } | null)?.kind === 'string'
         if (!exists && !declares) throw new RouteError(404, 'Source not found')
         // A new instance only starts its loop when the plugin restarts.
-        if (!exists) runtime.restartSoon()
+        // A Source's loops are built when the plugin starts, so a new instance and a disabled one both need a restart.
+        if (!exists || (current?.enabled === true && (request.value as { enabled?: boolean } | null)?.enabled === false)) runtime.restartSoon()
       }
       return runtime.settings.save(block, request.value, request.revision, 'panel')
     },
