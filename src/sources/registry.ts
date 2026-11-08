@@ -58,11 +58,13 @@ export class SourceRegistry implements SourceScope {
     return [...installed, ...orphaned]
   }
   instance<C extends Record<string, unknown>>(id: string, settings = this.settings()): SourceInstance<C> | undefined {
-    const kind = this.kinds.get(id)
-    return kind ? this.resolve(kind, settings.sources[id]) as SourceInstance<C> : undefined
+    // The stored entry names its kind; without one the id is the kind, which is how every existing deployment stores it.
+    const kind = this.kinds.get(settings.sources[id]?.kind ?? id)
+    return kind ? { ...this.resolve(kind, settings.sources[id]), id } as SourceInstance<C> : undefined
   }
-  validate(id: string, value: { enabled: boolean; config: unknown }): { enabled: boolean; config: Record<string, unknown> } {
-    const kind = this.kinds.get(id)
+  validate(id: string, value: { enabled: boolean; config: unknown; kind?: string }): { enabled: boolean; config: Record<string, unknown> } {
+    // A new instance states its kind before anything is stored; an existing one stores it on the entry.
+    const kind = this.kinds.get(value.kind ?? this.settings().sources[id]?.kind ?? id)
     if (!kind) throw new Error(`Source kind not installed: ${id}`)
     return { enabled: value.enabled, config: kind.schema.parse(value.config) }
   }
