@@ -152,7 +152,13 @@ export class Evals extends EnginePart {
     if (outcome.kind === 'accept' && evaluation.strength !== 'explicit' && !this.policy().admitsInferred(outcome.rules ?? [])) {
       throw new UserError('notExplicit')
     }
-    return this.decideEval(thread, evaluation, outcome)
+    const decision = this.decideEval(thread, evaluation, outcome)
+    // A reply an ignore carries goes out where the message was written, so nothing addressed to the agent stays
+    // unanswered. It is not a ticket's answer, so it names no ticket.
+    if (outcome.kind === 'ignore' && outcome.reply && trigger.channel && trigger.human) {
+      this.options.outbox.send({ id: key('reply', trigger.id), channel: trigger.channel, text: outcome.reply, kind: 'reply' })
+    }
+    return decision
   }
   /**
    * Queue a stored Trigger for a fresh Eval on its primary Thread and emit `trigger.requeued`; returns false while an Eval holds it.
