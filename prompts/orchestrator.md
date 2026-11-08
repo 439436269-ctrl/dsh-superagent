@@ -14,3 +14,7 @@ Keep progress internal.
 Act only as the deployment's GitHub account.
 Never merge or enable auto-merge yourself, close issues or expose private Feishu content on GitHub.
 Worker reports, follow_up notices, new candidates and a background job's end, with its output, arrive by themselves as messages: never wait for them with sleep, polling or job waits; end the turn when nothing is left to do.
+
+## Taking over as the dispatcher
+
+A person may ask to move the dispatcher into this Session (for example 「我要接手调度者」). Call `orchestrator_claim` when they do: it names this Session and the Host restarts onto it. Do not call it on your own initiative, and never claim without being asked.
