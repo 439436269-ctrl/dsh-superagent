@@ -8,7 +8,8 @@ import type { Localized, SourceKind } from './kind.ts'
 import type { SourceRegistry } from './registry.ts'
 
 export { SOURCE } from './im-bridge.ts'
-const ChatIdSchema = z.string().trim().regex(/^[A-Za-z0-9_:@.@+-]{1,200}$/, 'A chat id from your bridge')
+// Bridge ids are opaque: DingTalk pads its conversation ids with =, so the alphabet covers base64 as well.
+const ChatIdSchema = z.string().trim().regex(/^[A-Za-z0-9_:@.@+=\/=-]{1,200}$/, 'A chat id from your bridge')
 export const ImConfigSchema = z.object({
   /** The adapter executable, a command name or an absolute path. */
   command: z.string().trim().max(1000).default(''),
@@ -40,7 +41,7 @@ export const imKind: SourceKind<ImConfig> = {
     { key: 'chats', type: 'rows', label: { zh: '接收的会话', en: 'Chats' },
       hint: { zh: '“仅 @”接收 @ 机器人的消息和已有工单的线程；“全部消息”也接收其余消息，评估可按规则从中推断工作。', en: '"@ only" receives messages that mention the bot and Threads that have Tickets; "All" also receives the rest, from which Eval may infer work under the rules.' },
       columns: [
-        { key: 'chatId', type: 'text', label: { zh: '会话', en: 'Chat' }, pattern: '[A-Za-z0-9_:@.+-]{1,200}' },
+        { key: 'chatId', type: 'text', label: { zh: '会话', en: 'Chat' }, pattern: '[A-Za-z0-9_:@.+=\/-]{1,200}' },
         { key: 'listen', type: 'select', label: { zh: '接收', en: 'Receive' }, options: [{ value: 'mentions', label: { zh: '仅 @', en: '@ only' } }, { value: 'all', label: { zh: '全部消息', en: 'All' } }] },
       ] },
     { key: 'otherChats', type: 'select', label: { zh: '其他会话', en: 'Other chats' },
@@ -74,11 +75,11 @@ export const imKind: SourceKind<ImConfig> = {
     }).strict(),
     fields: [
       { key: 'allowed', type: 'rows', label: { zh: '能发起工作的 IM 用户', en: 'IM users who may originate work' },
-        columns: [{ key: 'id', type: 'text', label: { zh: '用户 id', en: 'User id' }, pattern: '[A-Za-z0-9_:@.+-]{1,200}' },
+        columns: [{ key: 'id', type: 'text', label: { zh: '用户 id', en: 'User id' }, pattern: '[A-Za-z0-9_:@.+=\/-]{1,200}' },
           { key: 'name', type: 'text', label: { zh: '名字', en: 'Name' }, optional: true }] },
       { key: 'bots', type: 'rows', label: { zh: '消息可以成为候选的机器人', en: 'Bots whose messages may become candidates' },
         hint: { zh: '名单里的机器人在接收的会话里发的消息成为推断的候选；它们不能发起明确请求，也不能停止工单。', en: 'Messages of a bot on this list, in chats the Source receives, become inferred candidates; they never make an explicit request or stop a ticket.' },
-        columns: [{ key: 'id', type: 'text', label: { zh: '机器人 id', en: 'Bot id' }, pattern: '[A-Za-z0-9_:@.+-]{1,200}' },
+        columns: [{ key: 'id', type: 'text', label: { zh: '机器人 id', en: 'Bot id' }, pattern: '[A-Za-z0-9_:@.+=\/-]{1,200}' },
           { key: 'name', type: 'text', label: { zh: '名字', en: 'Name' }, optional: true }] },
     ],
     explicit: { zh: '名单内的人 @ 机器人或私聊机器人，总是明确的请求，不需要配置。', en: 'Someone on the list who mentions the bot or messages it directly always makes an explicit request; that needs no setting.' },
