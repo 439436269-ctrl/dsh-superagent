@@ -16,8 +16,8 @@ describe('orchestrator_claim', () => {
     // The registry is the plugin's only contract with the Host: one tool, no parameters.
     apply(ctx as never)
     expect(registered).toHaveLength(1)
-    expect(registered[0].name).toBe('orchestrator_claim')
-    const result = await registered[0].execute({}, { agent: { id: 'session-caller' } })
+    expect(registered[0]!.name).toBe('orchestrator_claim')
+    const result = await registered[0]!.execute({}, { agent: { id: 'session-caller' } })
     expect(setDispatcher).toHaveBeenCalledWith('session-caller')
     expect(result).toEqual({ dispatcher: 'session-caller', claimed: true })
   })
@@ -27,7 +27,7 @@ describe('orchestrator_claim', () => {
     const { ctx, registered } = context(setDispatcher)
     apply(ctx as never)
     // A nested dispatch may arrive without an agent; claiming on its behalf would move the role to the wrong place.
-    await expect(registered[0].execute({}, {})).rejects.toThrow(/carries no Session/)
+    await expect(registered[0]!.execute({}, {})).rejects.toThrow(/carries no Session/)
     expect(setDispatcher).not.toHaveBeenCalled()
   })
 })

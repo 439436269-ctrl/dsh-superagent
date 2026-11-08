@@ -62,6 +62,9 @@ export function OverviewPage() {
   const { t, call, navigate } = usePanel()
   const { setup } = usePanelData()
   const { data, error, reload } = usePoll(() => call('GET overview'), [])
+  // The dispatcher is the Session that judges everything below, so its identity belongs on the page that summarises
+  // the work, not only on the tab that changes it.
+  const dispatcher = usePoll(() => call('GET dispatcher'), [])
   if (!data) return <LoadState error={error} loading />
   const stat = (label: string, value: ReactNode, route?: Route) => <span className="dt-stat">
     <span className="dt-stat-label">{label}</span>
@@ -90,6 +93,13 @@ export function OverviewPage() {
         {stat(t('flowAcceptedLabel'), data.flow.accepted, { page: 'eval', query: { window: '24h' } })}
         {data.flow.dropped > 0 && stat(t('flowDroppedLabel'), data.flow.dropped, { page: 'source' })}
       </div>
+    </Section>
+    <Section title={t('tab.dispatcher')} action={more({ page: 'dispatcher' })}>
+      {dispatcher.data ? <div className="dt-stats">
+        {stat(t('dispatcherKind'), dispatcher.data.id.startsWith('orchestrator-') ? t('dispatcherDefault') : t('dispatcherClaimed'))}
+        {stat(t('dispatcherId'), dispatcher.data.id)}
+        {stat(t('dispatcherRunning'), dispatcher.data.running ? t('dispatcherRunning') : t('dispatcherIdle'))}
+      </div> : <Hint>{t('dispatcherNone')}</Hint>}
     </Section>
     <Section title={t('term.executor')} action={more({ page: 'execution' })}>
       {/* Pauses surface in `problems` above, so Executor counts render the same in both states; while setup waits, nothing runs. */}
