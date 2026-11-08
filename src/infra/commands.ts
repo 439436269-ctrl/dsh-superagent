@@ -64,6 +64,12 @@ export class Commands {
   constructor(private readonly resolved: () => Deployment, private readonly environment: Record<string, string | undefined>, private readonly signal: AbortSignal) {}
   get deployment(): Deployment { return this.resolved() }
   get repository(): string { return this.deployment.repository }
+  /** The same caller, talking to another repository: API paths and page reads are prefixed with it instead. */
+  forRepository(repository: string): Commands {
+    if (repository === this.deployment.repository) return this
+    const resolved = this.resolved
+    return new Commands(() => ({ ...resolved(), repository }), this.environment, this.signal)
+  }
   withSignal(signal?: AbortSignal): Commands { return signal ? new Commands(this.resolved, this.environment, AbortSignal.any([this.signal, signal])) : this }
   async run(program: string, args: string[], cwd?: string): Promise<string> {
     try {
