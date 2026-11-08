@@ -53,6 +53,11 @@ export function machineOf(config: DeploymentConfig): Machine {
 
 export const GithubAccountsSchema = z.object({
   repository: z.string().trim().regex(/^([A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+)?$/, 'owner/name').default(''),
+  /**
+   * Every repository this deployment serves. Empty means only epository, which stays the default and what a
+   * single-repository deployment names (docs/013-multi-repository.md).
+   */
+  repositories: z.array(z.string().trim().regex(/^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/)).default([]),
   cli: z.string().trim().default(''),
 })
 export const FeishuBotSchema = z.object({ cli: z.string().trim().default('') })
