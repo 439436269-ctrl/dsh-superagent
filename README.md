@@ -83,3 +83,16 @@ Published so the next version has something to fix; none of these blocks a singl
    running with a dead socket until the plugin restarts. A keepalive has not been implemented.
 4. **The pull-request poll reads a bare number.** `follows` stores numbers, so two repositories with the same pull-request number can be
    confused; the Thread carries its repository but the follow does not yet.
+
+## Screenshots
+
+The panel, captured from a running instance:
+
+![Overview](docs/images/panel-superagent.png)
+
+- **Overview** — pending tickets, problems that need a person, and the last 24 hours (arrived, filtered, assessed, accepted).
+- **Workspace** — tickets appear as workspaces, each with its own directory.
+
+![Workspace](docs/images/panel-workspace.png)
+
+![Dispatcher](docs/images/panel-dispatcher.png)
