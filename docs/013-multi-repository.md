@@ -64,3 +64,38 @@ PR/回复 = 用 ticket.repository
 
 - worktree 目录布局变化会影响既有 worker 的 cwd 约定 → 阶段 3 需要同时更新 prompts/work.md 里的路径说明
 - 通知轮询变 N 个仓，GitHub 速率上限要复核（每仓一次轮询）
+## 多源：现状与改动面（2026-11-08 调研）
+
+需求：飞书、企业微信、钉钉都能配**多个来源实例**（多个机器人、多个群各自独立）。
+
+现状 **不支持**，而且不是缺 UI：`src/sources/registry.ts` 里
+
+```ts
+instances(settings) {
+  const installed = [...this.kinds.values()]
+    .map(kind => ({ ...this.resolve(kind, settings.sources[kind.kind]), installed: true }))
+}
+```
+
+`settings.sources` 的**键就是 kind**，所以一个 kind 只能有一个实例，存储层表达不了第二个飞书机器人。
+
+改动面：
+
+| 层 | 现在 | 要变成 |
+|---|---|---|
+| `settings.sources` | `{ [kind]: { enabled, config } }` | `{ [instanceId]: { kind, enabled, config } }` |
+| `instances()` | 每个 kind 一个 | 遍历存储里的所有实例 |
+| 健康条目 | 每 kind 一组 | 每实例一组 |
+| patch 条目 | 每 kind 一行 | 可多行同 kind、id 不同 |
+| 面板 | 每 kind 一个设置块 | 实例列表 + 新增/删除 |
+| 迁移 | — | 既有 `{ [kind]: … }` 归一成 `{ [kind]: { kind, … } }`，id 沿用 kind |
+
+## 调整后的顺序
+
+原来把多源排在多仓之后，现在看两者共享同一个前置条件：**配置从单值变集合**。
+
+1. 多仓阶段 2（`source:github` 的 `repository` 变 `repositories` 列表）——第一个"单值变集合"的样本
+2. **多源改造**（`settings.sources` 按实例 id）——把阶段 2 的模式推广到所有 kind
+3. 多仓阶段 3–5
+
+阶段 2 因此不只是多仓的一步，也是多源的探路。
