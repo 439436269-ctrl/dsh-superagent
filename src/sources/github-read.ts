@@ -159,6 +159,10 @@ async function conversationPage(commands: Commands, number: number, page: number
 export const githubThreadContext: ThreadContext<unknown> = {
   messageId: trigger => trigger.url ?? '',
   read: async (commands, trigger, part, cursor) => {
+    // A Thread from another repository has to be read there: its number alone would answer with a same-numbered issue
+    // from the default repository, and the assessment would describe the wrong request.
+    const named = typeof trigger.meta.repository === 'string' ? trigger.meta.repository : undefined
+    const scoped = named ? commands.forRepository(named) : commands
     // The default branch's CI has no conversation; its Trigger is its context.
     if (typeof trigger.meta.branch === 'string') {
       const message = { id: trigger.url ?? trigger.id, from: 'CI', at: trigger.at, text: trigger.text, bot: true as const }
@@ -166,12 +170,12 @@ export const githubThreadContext: ThreadContext<unknown> = {
     }
     const number = Number(trigger.meta.number)
     if (trigger.meta.kind === 'inline' && typeof trigger.meta.commentId === 'number') {
-      const thread = await reviewThread(commands, number, trigger.meta.commentId)
+      const thread = await reviewThread(scoped, number, trigger.meta.commentId)
       const messages = threadMessages(thread, item => item.html_url ?? String(item.id))
       const read = part === 'thread' ? messages : messages.slice(0, 1)
       return { messages: read, body: { status: 'review_thread', messages: read }, status: 'review_thread' }
     }
-    const body = await conversationPage(commands, number, Number(cursor ?? '1'))
+    const body = await conversationPage(scoped, number, Number(cursor ?? '1'))
     return { messages: body.messages, next: body.next_resource ?? undefined, body }
   },
 }
