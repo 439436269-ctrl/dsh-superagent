@@ -244,11 +244,13 @@ async function readStream(ctx: SourceContext, round: Round, id: string, path: st
   catch (error) {
       // A cursor written before a stream kind was observed lacks that kind in started, and the items of that kind
       // would then look stale forever; recording the kinds here repairs such a cursor on the next unchanged list.
+    ctx.state.set('github-read-error', { repository, stream: id, error: String(error) })
       if (error instanceof CliError && error.code === 304) { ctx.state.set(name, { ...stored, started }); return }
     throw error
   }
   const { headers, body } = included(raw)
   const items = validItems(ListedSchema, z.array(z.unknown()).parse(JSON.parse(body)), round.tally)
+  ctx.state.set('github-read', { repository, stream: id, status: headers.match(/^status:\s*(\d+)/im)?.[1] ?? '?', fetched: items.length, since })
   const { login } = ctx.deployment.github
   const fresh = (at: string | null | undefined, kind: string) =>
     kind in started && Date.parse(at ?? '') >= Math.max(Date.parse(started[kind]!), horizon)
