@@ -105,6 +105,17 @@ export class Runtime extends Service implements SourceHost {
     return { id: this.masterId, available: true, running: live.find(item => item.sessionId === this.masterId)?.running ?? false, note: this.claimFallback }
   }
   /**
+   * Delivers a message from another Session to the dispatcher. `request` asks it to judge and assign work; `delegate`
+   * states that work is being handed over. The label is what the dispatcher reads, so it knows which to expect.
+   */
+  async inbound(from: string, text: string, intent: 'request' | 'delegate', signal: AbortSignal): Promise<{ delivered: string }> {
+    const bus = this.toolHost.bus
+    if (!bus.dsh) throw new Error('This Host exposes no Session service, so the dispatcher cannot be reached')
+    if (from === this.masterId) throw new Error('This Session is the dispatcher; ask it in words instead')
+    await bus.dsh.message(this.masterId, '[' + intent + ' from ' + from + ']\n\n' + text, signal)
+    return { delivered: this.masterId }
+  }
+  /**
    * Records the Session that should judge and assign work, or clears the record so the default one is used again. The
    * plugin restarts so the new main Session is resolved and decorated before the next Trigger arrives.
    */
