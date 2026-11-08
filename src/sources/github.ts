@@ -157,7 +157,7 @@ interface Round {
 const newRound = (signal?: AbortSignal): Round => ({ started: new Date().toISOString(), signal, pulls: new Map(), read: new Set(),
   failures: [], dropped: [], abandoned: [], tally: { skipped: 0 } })
 const stopped = (ctx: SourceContext, round: Round): boolean => !!round.signal?.aborted || !ctx.config(SOURCE)
-export interface Retry { since: string; pr: boolean; failedAt?: string; attempts?: number }
+export interface Retry { since: string; pr: boolean; /** The repository the notification came from, so a retried read still knows where it belongs. */ repository?: string; failedAt?: string; attempts?: number }
 const RETRY_WINDOW_MS = 24 * 3600_000
 /** True when GitHub returns HTTP 410 (Gone); HTTP 404 is retried because it can indicate revoked access to a private repository. */
 const deleted = (error: unknown): boolean => error instanceof CliError && error.code === 410
@@ -207,7 +207,9 @@ async function pollRepository(ctx: SourceContext, round: Round): Promise<void> {
  */
 async function readStream(ctx: SourceContext, round: Round, id: string, path: string, config: GithubConfig, repository: string): Promise<void> {
   // Every Trigger from this poll names the repository it came from, so the ticket it becomes knows where it works.
-  const stamped = (trigger: Trigger): Trigger => ({ ...trigger, meta: { ...trigger.meta, repository } })
+  // Named only when it differs from the default, so a single-repository deployment is unchanged.
+  const stamped = (trigger: Trigger): Trigger => repository !== ctx.deployment.repository
+    ? { ...trigger, meta: { ...trigger.meta, repository } } : trigger
   const name = KV.github.stream(id)
   const stored = ctx.state.get(name)
   const kinds = id === 'issues' ? [...config.observeIssues ? ['issues'] : [], ...config.observePulls ? ['pulls'] : []] : ['comments']
@@ -329,7 +331,7 @@ async function pollNotifications(ctx: SourceContext, round: Round): Promise<{ co
     const address = githubAddress(notification.subject.url ?? '', notification.repository.full_name)
     if (!address || address.discussion || items.has(address.number)) continue
     const { number, pr } = address
-    items.set(number, { since: [state.get(KV.github.cursor(number)) ?? since, since].sort().at(-1)!, pr })
+    items.set(number, { since: [state.get(KV.github.cursor(number)) ?? since, since].sort().at(-1)!, pr, repository: notification.repository.full_name })
   }
   for (const [number, item] of items) {
     if (stopped(ctx, round)) return { count: notifications.length, interval }
@@ -352,6 +354,12 @@ async function pollNotifications(ctx: SourceContext, round: Round): Promise<{ co
 }
 async function readNotified(ctx: SourceContext, round: Round, number: number, item: Retry): Promise<void> {
   const { since } = item
+  // The notification knows its repository; the triggers it produces must say so, or the ticket would fall back to the
+  // default repository and the worker would open its worktree in the wrong one.
+  // Only a repository other than the default is named: a single-repository deployment then produces exactly the triggers
+  // it did before, and readers fall back to the configured repository when the meta is absent.
+  const stamped = (trigger: Trigger): Trigger => item.repository && item.repository !== ctx.deployment.repository
+    ? { ...trigger, meta: { ...trigger.meta, repository: item.repository } } : trigger
   let isPr = item.pr
   if (!isPr) {
     const issue = await ctx.commands.withSignal(round.signal).api(IssueSchema, `issues/${number}`)
@@ -362,8 +370,8 @@ async function readNotified(ctx: SourceContext, round: Round, number: number, it
       // A mention added by a later edit to the body is not read: only the author can be the actor of the body.
       const { login } = ctx.deployment.github
       const opened = Date.parse(issue.created_at) >= Date.parse(since) && !sameName(issue.user.login, login)
-      if (opened) await ctx.receive(issueTrigger(issue, login))
-      await intakeComments(ctx, { number, isPr: false, url: issue.html_url }, since, round)
+      if (opened) await ctx.receive(stamped(issueTrigger(issue, login)))
+      await intakeComments(ctx, { number, isPr: false, url: issue.html_url }, since, round, item.repository)
       nameThread(ctx, number, issue.title)
     }
   }
@@ -373,9 +381,9 @@ async function readNotified(ctx: SourceContext, round: Round, number: number, it
     const { login } = ctx.deployment.github
     if (pr.created_at && Date.parse(pr.created_at) >= Date.parse(since) && !sameName(pr.user.login, login)) {
       const opened = { number, title: pr.title ?? '', body: pr.body, user: pr.user, created_at: pr.created_at, html_url: pr.html_url }
-      await ctx.receive(pullTrigger(opened, login))
+      await ctx.receive(stamped(pullTrigger(opened, login)))
     }
-    await intakeComments(ctx, { number, isPr: true, url: pr.html_url, prAuthor: pr.user.login }, since, round)
+    await intakeComments(ctx, { number, isPr: true, url: pr.html_url, prAuthor: pr.user.login }, since, round, item.repository)
     if (pr.title) nameThread(ctx, number, pr.title)
   }
   ctx.state.set(KV.github.cursor(number), cursorAt(round.started))
@@ -390,9 +398,12 @@ function pull(ctx: SourceContext, round: Round, number: number): Promise<Pull> {
   }
   return read
 }
-async function intakeComments(ctx: SourceContext, ref: PullRef, since: string, round: Round): Promise<void> {
+async function intakeComments(ctx: SourceContext, ref: PullRef, since: string, round: Round, repository?: string): Promise<void> {
   const commands = ctx.commands.withSignal(round.signal)
   const { login } = ctx.deployment.github
+  // A comment on a Thread keeps the repository its notification named; without it the ticket falls back to the default.
+  const stamped = (trigger: Trigger): Trigger => repository && repository !== ctx.deployment.repository
+    ? { ...trigger, meta: { ...trigger.meta, repository } } : trigger
   const kinds = ref.isPr ? ['conversation', 'inline', 'review'] as const : ['conversation'] as const
   for (const kind of kinds) {
     const suffix = `&since=${encodeURIComponent(since)}`
@@ -406,7 +417,7 @@ async function intakeComments(ctx: SourceContext, ref: PullRef, since: string, r
       if (sameName(comment.user.login, login)) continue
       // A review decision without a body still reaches the ticket: a worker may be waiting for that approval.
       const trigger = commentTrigger(comment, ref, kind, login)
-      if (trigger.text) await ctx.receive(trigger)
+      if (trigger.text) await ctx.receive(stamped(trigger))
     }
   }
 }

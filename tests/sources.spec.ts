@@ -589,7 +589,7 @@ describe('github source', () => {
     expect(h.receive.mock.calls.map(([trigger]) => trigger.meta.number)).toEqual([13])
     // The cursor moved together with the Issue it does not cover yet.
     expect(Date.parse(h.store.get<string>('github-since')!)).toBeGreaterThan(Date.parse('2026-09-08T00:00:00.000Z'))
-    expect(h.store.get('github-retry')).toEqual({ 12: { since: '2026-09-08T00:00:00.000Z', pr: false, attempts: 1, failedAt: expect.any(String) } })
+    expect(h.store.get('github-retry')).toEqual({ 12: { since: '2026-09-08T00:00:00.000Z', pr: false, repository: 'acme/widgets', attempts: 1, failedAt: expect.any(String) } })
     expect(h.store.threads.get('github:12')!.meta.pollError).toContain('Bad Gateway')
     Object.assign(routes, { notifications: [], 'issues/12': issue(12, { created_at: '2026-08-01T00:00:00Z' }),
       'issues/12/comments': [mention(2, 12, '2026-09-08T02:00:00Z')] })
