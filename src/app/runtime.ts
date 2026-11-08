@@ -82,6 +82,16 @@ export class Runtime extends Service implements SourceHost {
   private closingFlag = false
   private stopping?: Promise<void>
   private readonly sourceDeps: SourceContextDeps
+  /**
+   * The Session that judges and assigns work, and whether this Host can reach it. `available` is false when the Host
+   * exposes no Session service, which is also when the management tools refuse.
+   */
+  async dispatcher(): Promise<{ id: string; available: boolean; running: boolean }> {
+    const bus = this.toolHost.bus
+    if (!bus.dsh) return { id: this.masterId, available: false, running: false }
+    const live = await bus.dsh.live(AbortSignal.timeout(5000)).catch(() => [])
+    return { id: this.masterId, available: true, running: live.find(item => item.sessionId === this.masterId)?.running ?? false }
+  }
   private readonly toolHost: MainToolsHost & ExecutorToolsHost
   /** Non-zero while a main-Session tool is executing an Engine command, suppressing self-triggered domain event notices. */
   private quiet = 0
@@ -235,7 +245,7 @@ export class Runtime extends Service implements SourceHost {
       get deployment() { return setup.deployment },
       get setupProblem() { return setup.problem }, get feishuProblem() { return setup.feishuProblem },
       configured: () => setup.configured(), links: () => runtime.links(), ticketEnvironment: ticket => runtime.ticketEnvironment(ticket),
-      checkSetup: () => { setup.check() }, requestPass: () => { passes.request() }, models: () => this.ctx.sessionController.modelCatalog() }
+      checkSetup: () => { setup.check() }, requestPass: () => { passes.request() }, models: () => this.ctx.sessionController.modelCatalog(), dispatcher: () => this.dispatcher() }
   }
   /** Idempotent stop; concurrent or repeated calls share the same shutdown promise. */
   stop(): Promise<void> { return this.stopping ??= this.shutdown() }
