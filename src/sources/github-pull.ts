@@ -15,9 +15,20 @@ const PullSchema = z.looseObject({
 export type Pull = z.infer<typeof PullSchema> & { number: number }
 export const readPull = async (ctx: SourceContext, number: number, signal?: AbortSignal): Promise<Pull> =>
   ({ ...await ctx.commands.withSignal(signal).api(PullSchema, `pulls/${number}`), number })
-const pullNumber = (thread: string): number | undefined => thread.startsWith(`${SOURCE}:`) ? Number(thread.slice(SOURCE.length + 1)) : undefined
+/** A Thread id names a repository only when it is not the default one: `github:5` or `github:owner/name#5`. */
+const pullRef = (thread: string): { repository?: string; number: number } | undefined => {
+  if (!thread.startsWith(`${SOURCE}:`)) return undefined
+  const rest = thread.slice(SOURCE.length + 1)
+  const hash = rest.lastIndexOf('#')
+  const repository = hash >= 0 ? rest.slice(0, hash) : undefined
+  const number = Number(hash >= 0 ? rest.slice(hash + 1) : rest)
+  return Number.isFinite(number) && number > 0 ? { ...repository ? { repository } : {}, number } : undefined
+}
+/** Each followed Thread that is a pull request, with the repository it lives in when it is not the default one. */
+export const pullRefsOf = (ticket: Pick<Ticket, 'follows'>, open = false): { repository?: string; number: number }[] =>
+  (ticket.follows ?? []).filter(item => !open || !item.closed).flatMap(item => pullRef(item.thread) ?? [])
 export const pullsOf = (ticket: Pick<Ticket, 'follows'>, open = false): number[] =>
-  (ticket.follows ?? []).filter(item => !open || !item.closed).flatMap(item => pullNumber(item.thread) ?? [])
+  pullRefsOf(ticket, open).map(ref => ref.number)
 export const pullOf = (ticket: Pick<Ticket, 'follows'>): number | undefined => pullsOf(ticket, true).at(-1) ?? pullsOf(ticket).at(-1)
 /** True when the PR was opened by the agent account from a branch in the configured repository (not a fork). */
 export const agentPull = (pr: { user: { login: string }; head?: { repo?: { full_name: string } | null } | null },
@@ -93,11 +104,11 @@ function closePull(ctx: SourceContext, pr: Pull): void {
  */
 export function pullEndNotices(ticket: Ticket, request: string, repository: string): OutboundMessage[] {
   const outcome = ticket.ended?.outcome
-  const follows = (ticket.follows ?? []).filter(item => item.closed && pullNumber(item.thread) !== undefined)
+  const follows = (ticket.follows ?? []).filter(item => item.closed && pullRef(item.thread) !== undefined)
   const latest = (items: Follow[]) => items.sort((a, b) => b.closed!.at.localeCompare(a.closed!.at))[0]
   const follow = latest(follows.filter(item => item.own)) ?? latest(follows)
   if ((outcome !== 'merged' && outcome !== 'closed') || !follow) return []
-  const number = pullNumber(follow.thread)!
+  const number = pullRef(follow.thread)!.number
   const url = githubPage(repository, number, true)
   const chinese = /\p{Script=Han}/u.test(request) && !/[\p{Script=Hiragana}\p{Script=Katakana}]/u.test(request)
   const text = chinese

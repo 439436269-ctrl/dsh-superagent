@@ -9,7 +9,7 @@ import { branchCiTrigger, ciTrigger, commentTrigger, CommentSchema, githubAddres
   from './github-trigger.ts'
 import { githubLink, sendGithub } from './github-channel.ts'
 import type { GithubComment, PullRef } from './github-trigger.ts'
-import { observePull, pullsOf, readPull, type Pull } from './github-pull.ts'
+import { observePull, pullRefsOf, pullsOf, readPull, type Pull } from './github-pull.ts'
 import { health, sourceContext, type Health, type SourceContext } from './host.ts'
 import { KV } from '../kv.ts'
 import { cursorAt, pause, POLL_HORIZON_MS, pollThreads as pollEach } from './poll.ts'
@@ -457,13 +457,24 @@ async function intakeComments(ctx: SourceContext, ref: PullRef, since: string, r
   }
 }
 export async function pollTicketPulls(ctx: SourceContext, signal?: AbortSignal, round = newRound(signal)): Promise<void> {
-  const numbers = [...new Set(ctx.tickets.open().flatMap(ticket => pullsOf(ticket, true)))]
-  for (const number of numbers) {
-    if (stopped(ctx, round)) return
-    try {
-      const pr = await pull(ctx, round, number)
-      if (pr.state !== 'closed' && !pr.merged) await pollChecks(ctx, round, number, pr)
-    } catch (error) { if (!stopped(ctx, round)) failed(ctx, round, number, error) }
+  // A Thread names its repository only when it is not the default one; each has to be read from where it lives.
+  const refs = new Map<string, { repository?: string; numbers: number[] }>()
+  for (const ticket of ctx.tickets.open()) {
+    for (const ref of pullRefsOf(ticket, true)) {
+      const entry = refs.get(ref.repository ?? "") ?? { ...ref.repository ? { repository: ref.repository } : {}, numbers: [] }
+      if (!entry.numbers.includes(ref.number)) entry.numbers.push(ref.number)
+      refs.set(ref.repository ?? "", entry)
+    }
+  }
+  for (const { repository, numbers } of refs.values()) {
+    const scoped = repository ? { ...ctx, commands: ctx.commands.forRepository(repository) } : ctx
+    for (const number of numbers) {
+      if (stopped(ctx, round)) return
+      try {
+        const pr = await pull(scoped, round, number)
+        if (pr.state !== "closed" && !pr.merged) await pollChecks(scoped, round, number, pr)
+      } catch (error) { if (!stopped(ctx, round)) failed(ctx, round, number, error) }
+    }
   }
 }
 /** Polls a PR's CI checks; only changes after the first baseline observation become Triggers. */
