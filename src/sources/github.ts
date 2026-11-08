@@ -306,6 +306,8 @@ async function pollNotifications(ctx: SourceContext, round: Round): Promise<{ co
   const since = state.get(KV.github.since) ?? round.started
   if (state.get(KV.github.since) === undefined) state.set(KV.github.since, since)
   const { repository } = ctx.deployment
+  // A deployment may serve several repositories; without the list it serves the default one.
+  const served = ctx.deployment.repositories?.length ? ctx.deployment.repositories : [repository]
   const path = `notifications?all=true&per_page=50&since=${encodeURIComponent(since)}`
   const raw = await commands.api(path, '--include')
   const split = raw.search(/\r?\n\r?\n/)
@@ -321,8 +323,8 @@ async function pollNotifications(ctx: SourceContext, round: Round): Promise<{ co
   // Failed items from the previous round run first, followed by newly notified items in chronological order; each is read once.
   const items = new Map(Object.entries(retries).map(([number, retry]) => [Number(number), retry]))
   for (const notification of notifications.reverse()) {
-    if (!sameName(notification.repository.full_name, repository)) continue
-    const address = githubAddress(notification.subject.url ?? '', repository)
+    if (!served.some(name => sameName(notification.repository.full_name, name))) continue
+    const address = githubAddress(notification.subject.url ?? '', notification.repository.full_name)
     if (!address || address.discussion || items.has(address.number)) continue
     const { number, pr } = address
     items.set(number, { since: [state.get(KV.github.cursor(number)) ?? since, since].sort().at(-1)!, pr })
