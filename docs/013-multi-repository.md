@@ -312,3 +312,35 @@ const instances = sources.instances().filter(i => i.kind === imKind.kind && i.en
 - 停用不再需要重启才生效（历史问题一并消除）
 
 **仍未做**：多个**启用**实例之间的健康区分（它们共用一条文案，都健康时显示 `ready` 是正确的，只是分不清谁是谁）。危害已消除，属于纯展示问题。
+
+## 严重缺陷（2026-11-09 00:12）：准入用的是默认实例的配置
+
+用两个探针实例（`im-probe-a`、`im-probe-b`，同一 kind `im`，各自配置自己的群 `probe-a`/`probe-b`）实测：
+
+```
+im: received=3  filtered=2
+  filtered: {code: chat_not_allowed} × 2
+```
+
+**两条探针消息都到了引擎，但被判「群不允许」**——因为准入检查按 kind 解析实例：
+
+```ts
+// src/sources/registry.ts:87
+channelAllowed(channel) {
+  const kind = this.kinds.get(channel.source)          // channel.source 是 kind 名
+  const instance = this.resolve(kind, settings.sources[channel.source])   // ← 永远解析到默认实例
+  ...
+}
+```
+
+后果：**第二个实例自己配置的群不会被承认**，消息一律被判 `chat_not_allowed`。
+
+这解释了为什么之前一直没暴露：`im` 与 `im-2` 配的是**同一个群**，而该群在默认实例 `im` 的列表里，所以两者都"通过"了。一旦两个实例监听不同群，第二个就完全收不到东西——**这正是「多个群各自独立」要验证的场景，而它现在是坏的**。
+
+修法与线程键同源：**实例身份要贯穿 channel**。`channel.source` 目前只有 kind 名，需要带上实例 id（或 trigger 加 `meta.instance`，`channelAllowed` 与 `listened` 按它解析）。
+
+## 多源验证的真实结论
+
+- 「各跑各的进程/凭据」✅ 已证
+- 「各自的群被承认」❌ **反证**（本轮探针实测失败）
+- 「两个机器人各收一条」仍缺人工触发（钉钉），但即使发了，只要两个实例监听不同群，就会撞上这个缺陷
