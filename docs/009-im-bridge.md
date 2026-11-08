@@ -132,3 +132,41 @@ no mention, so the Feishu admission shape applies: `direct: { unlistedAddressed:
 
 Check the cryptography without an app: `node examples/im-bridges/wecom.test.mjs` encrypts a message the way 企业微信
 does and reads it back with the bridge's own decryption.
+
+## DingTalk
+
+DingTalk's robot speaks two different protocols, and the bridge uses one for each direction.
+
+**Receiving** is a callback: the robot posts to an HTTP endpoint of yours, so the bridge runs a server. Every callback is
+already addressed to the robot, so the line always carries `mentionsBot: true`.
+
+```
+POST https://<your host>/<path>          headers: timestamp, sign
+{ "conversationId": "cid...", "conversationType": "2", "senderStaffId": "staff...",
+  "senderNick": "He", "msgId": "m1", "createAt": 1700000000000, "text": { "content": "@机器人 帮我改 README" } }
+```
+
+`sign` is `base64(HMAC-SHA256(secret, timestamp + "\n" + secret))`; with `DINGTALK_APP_SECRET` set the bridge rejects a
+callback whose signature does not match, and answers `{"errcode":0}` so the robot does not post a second message.
+
+**Sending** is the group robot webhook, optionally signed the same way:
+
+```
+POST https://oapi.dingtalk.com/robot/send?access_token=...&timestamp=...&sign=...
+{ "msgtype": "text", "text": { "content": "..." } }
+```
+
+Environment: `DINGTALK_PORT` (default `8877`), `DINGTALK_APP_SECRET`, `DINGTALK_ROBOT_TOKEN`, `DINGTALK_ROBOT_SECRET`.
+
+Because the callback needs a public URL, run the bridge behind a tunnel (see the WeCom section) and point the Source at
+it:
+
+```yaml
+- id: dsh-superagent-im
+  name: dsh-superagent/im-watch
+  config:
+    cli: node E:/codes/dsh-superagent-prototype/examples/im-bridges/dingtalk.mjs
+```
+
+The pure parts — signing, comparison, callback mapping — live in `dingtalk-core.mjs`, so `tests/dingtalk.spec.ts` can
+check them without starting a server or exiting the test process.
