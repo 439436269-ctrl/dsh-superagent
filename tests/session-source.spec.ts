@@ -19,6 +19,6 @@ describe('session source kind', () => {
   })
 
   it('sends replies back to the Session that sent the message', () => {
-    expect(sessionChannel('s1')).toEqual({ source: SESSION_SOURCE, address: { session: 's1' } })
+    expect(sessionChannel('s1')).toEqual({ source: SESSION_SOURCE, thread: 'session:s1', address: { session: 's1' } })
   })
 })
