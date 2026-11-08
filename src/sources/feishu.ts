@@ -132,8 +132,17 @@ export const inject = ['orchestrator']
 export function apply(ctx: Context): void {
   ctx.effect(() => ctx.orchestrator.sources.register(feishuKind), 'feishu: source kind')
   ctx.effect(() => {
-    const controller = new AbortController()
-    const running = runFeishu(sourceContext(ctx.orchestrator, feishuKind), controller.signal)
-    return async () => { controller.abort(); await running }
+    // One loop per instance: each runs its own consumer with its own bot credentials.
+    const instances = ctx.orchestrator.sources.instances().filter(instance => instance.kind === feishuKind.kind)
+    const controllers: AbortController[] = []
+    const running = instances.map(instance => {
+      const controller = new AbortController()
+      controllers.push(controller)
+      return runFeishu(sourceContext(ctx.orchestrator, feishuKind, instance.id), controller.signal)
+    })
+    return async () => {
+      for (const controller of controllers) controller.abort()
+      await Promise.allSettled(running)
+    }
   })
 }
