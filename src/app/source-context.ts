@@ -41,8 +41,8 @@ export function sourceContextOf(deps: SourceContextDeps, kind: { kind: string; h
     get problem() { return [deps.feishuProblem, deps.setupProblem].find(problem => problem?.place === kind.kind) },
     // The bound instance answers when no id is given, which is what lets one kind serve several instances.
     config: <C extends Record<string, unknown>>(id: string = instance) => {
-      const instance = deps.sources.instance<C>(id)
-      return instance?.enabled ? instance.config : undefined
+      const found = deps.sources.instance<C>(id)
+      return found?.enabled ? found.config : undefined
     },
     receive: trigger => deps.receive(trigger),
     atomic: work => store.atomic(work),
