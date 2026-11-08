@@ -159,4 +159,21 @@ describe('Source registry', () => {
     expect(await sources.send(reply, commands)).toBe('sent')
     expect(run.mock.calls[0]![1]).toEqual(expect.arrayContaining(['+messages-reply', '--message-id', 'om_dm']))
   })
+  it('admits a Channel through the instance its address names, not through the kind', () => {
+    // Two instances of one kind, each listening to its own chat: the second one's chat must not be judged against the first's.
+    const settings = SettingsSchema.parse({ sources: {
+      chat: { enabled: true, config: { chat: 'A' } },
+      'chat-2': { enabled: true, kind: 'chat', config: { chat: 'B' } },
+    } })
+    const sources = new SourceRegistry(() => settings)
+    sources.register({
+      kind: 'chat', title: { zh: '', en: '' }, description: { zh: '', en: '' }, health: [],
+      schema: z.object({ chat: z.string() }).strict(), fields: [],
+      channel: { allowed: (address, config) => address.chat === (config as { chat: string }).chat, send: () => 'sent', link: () => ({}) },
+    } as SourceKind<{ chat: string }>)
+    expect(sources.channelAllowed({ source: 'chat', address: { chat: 'A' } })).toBe(true)
+    expect(sources.channelAllowed({ source: 'chat', address: { chat: 'B' } })).toBe(false)
+    expect(sources.channelAllowed({ source: 'chat', address: { chat: 'B', instance: 'chat-2' } })).toBe(true)
+  })
+
 })
