@@ -146,6 +146,9 @@ export class Runtime extends Service implements SourceHost {
   private defaultMasterId = ''
   /** Why a claimed dispatcher was dropped at startup, so the panel can say it instead of failing silently. */
   claimFallback?: string
+
+  /** Restarts the plugin shortly, so a Source instance added just now starts its loop. */
+  restartSoon(delayMs = 2_000): void { setTimeout(() => this.restart(), delayMs) }
   private readonly toolHost: MainToolsHost & ExecutorToolsHost
   /** Non-zero while a main-Session tool is executing an Engine command, suppressing self-triggered domain event notices. */
   private quiet = 0
@@ -319,7 +322,7 @@ export class Runtime extends Service implements SourceHost {
       get deployment() { return setup.deployment },
       get setupProblem() { return setup.problem }, get feishuProblem() { return setup.feishuProblem },
       configured: () => setup.configured(), links: () => runtime.links(), ticketEnvironment: ticket => runtime.ticketEnvironment(ticket),
-      checkSetup: () => { setup.check() }, requestPass: () => { passes.request() }, models: () => this.ctx.sessionController.modelCatalog(), dispatcher: () => this.dispatcher(), setDispatcher: (id: string | null) => this.setDispatcher(id), sessionsList: () => this.dispatcherSessions() }
+      checkSetup: () => { setup.check() }, requestPass: () => { passes.request() }, models: () => this.ctx.sessionController.modelCatalog(), restartSoon: (delayMs?: number) => this.restartSoon(delayMs), dispatcher: () => this.dispatcher(), setDispatcher: (id: string | null) => this.setDispatcher(id), sessionsList: () => this.dispatcherSessions() }
   }
   /** Idempotent stop; concurrent or repeated calls share the same shutdown promise. */
   stop(): Promise<void> { return this.stopping ??= this.shutdown() }
