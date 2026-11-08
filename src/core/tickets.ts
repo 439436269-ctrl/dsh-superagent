@@ -40,6 +40,10 @@ export class Tickets extends EnginePart {
     // Fall back to the last trigger for Evals recorded before `primary` existed.
     const primary = this.repo.triggers.get(evaluation.primary ?? triggerIds.at(-1)!)
     const origin = { triggerId: primary?.id ?? triggerIds[0]!, triggerIds }
+    // A Source that serves several repositories names one on the Trigger; without it the ticket keeps no repository and
+    // readers fall back to the configured one, which is what every single-repository deployment expects.
+    const declared = primary?.meta.repository
+    const repository = typeof declared === 'string' && declared.trim() ? declared.trim() : undefined
     let ticket: Ticket = { id, title: outcome.title, decisionId, mandate, channels: [], assignments: [], inputs: [], undelivered: [],
       createdAt: at, updatedAt: at, origin }
     for (const triggerId of triggerIds) {

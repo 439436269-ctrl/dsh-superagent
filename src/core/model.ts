@@ -279,7 +279,12 @@ export interface Ticket {
   title: string
   decisionId: string
   mandate: Mandate
-  /** The Channels of the messages it was accepted from, which its replies go to. */
+  /**
+   * The repository this ticket works in, recorded when it is accepted so a deployment can serve several repositories at
+   * once (docs/013-multi-repository.md). Absent on tickets accepted before the field existed, and on deployments that
+   * name a single repository: readers fall back to the configured one.
+   */
+  repository?: string  /** The Channels of the messages it was accepted from, which its replies go to. */
   channels: ChannelRef[]
   /** When, by whom, and how the ticket ended, with a person's or the host's reason beyond the outcome; an open ticket has none. */
   ended?: { at: string; by: TicketEndBy; outcome: TicketOutcome; reason?: string }
