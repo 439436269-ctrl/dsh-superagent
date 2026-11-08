@@ -126,6 +126,9 @@
     # only what the main Session uses: no subagents, web, file search or writes, todo list, questions to a person, presenting,
     # plan mode, plugin manager, scheduling, goals or workflows. No persona: the main Session's prompt is complete, so it has
     # no other section.
+    # The bare claim tool, so a Session started with the router preset can take the dispatcher role on request.
+    - id: dsh-superagent-claim
+      name: dsh-superagent/claim
     - id: dsh-superagent-router-preset
       name: '@deepseek-ai/dsh-agent-preset'
       config:
