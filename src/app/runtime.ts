@@ -86,6 +86,13 @@ export class Runtime extends Service implements SourceHost {
    * The Session that judges and assigns work, and whether this Host can reach it. `available` is false when the Host
    * exposes no Session service, which is also when the management tools refuse.
    */
+  /** Sessions this Host can name as the dispatcher, newest first, so a person picks one instead of typing an id. */
+  async dispatcherSessions(): Promise<{ id: string; running: boolean; cwd: string }[]> {
+    const bus = this.toolHost.bus
+    if (!bus.dsh) return []
+    const live = await bus.dsh.live(AbortSignal.timeout(5000)).catch(() => [])
+    return live.map(item => ({ id: item.sessionId, running: item.running, cwd: item.cwd ?? '' }))
+  }
   async dispatcher(): Promise<{ id: string; available: boolean; running: boolean }> {
     const bus = this.toolHost.bus
     if (!bus.dsh) return { id: this.masterId, available: false, running: false }
@@ -257,7 +264,7 @@ export class Runtime extends Service implements SourceHost {
       get deployment() { return setup.deployment },
       get setupProblem() { return setup.problem }, get feishuProblem() { return setup.feishuProblem },
       configured: () => setup.configured(), links: () => runtime.links(), ticketEnvironment: ticket => runtime.ticketEnvironment(ticket),
-      checkSetup: () => { setup.check() }, requestPass: () => { passes.request() }, models: () => this.ctx.sessionController.modelCatalog(), dispatcher: () => this.dispatcher(), setDispatcher: (id: string | null) => this.setDispatcher(id) }
+      checkSetup: () => { setup.check() }, requestPass: () => { passes.request() }, models: () => this.ctx.sessionController.modelCatalog(), dispatcher: () => this.dispatcher(), setDispatcher: (id: string | null) => this.setDispatcher(id), sessionsList: () => this.dispatcherSessions() }
   }
   /** Idempotent stop; concurrent or repeated calls share the same shutdown promise. */
   stop(): Promise<void> { return this.stopping ??= this.shutdown() }
