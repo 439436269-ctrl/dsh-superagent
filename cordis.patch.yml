@@ -3,20 +3,20 @@
 # refuses to start without stateDir.
 - insert:
     - id: dsh-superagent
-      name: dsh-superagent
+      name: '@vfvrpq/dsh-superagent'
     - id: dsh-superagent-github
-      name: dsh-superagent/github-watch
+      name: '@vfvrpq/dsh-superagent/github-watch'
     # Optional Feishu Source; requires configuring a bot CLI after enabling.
     - id: dsh-superagent-feishu
-      name: dsh-superagent/feishu-watch
+      name: '@vfvrpq/dsh-superagent/feishu-watch'
       disabled: true
     # Optional generic IM Source; set a bridge command after enabling (docs/009-im-bridge.md).
     - id: dsh-superagent-im
-      name: dsh-superagent/im-watch
+      name: '@vfvrpq/dsh-superagent/im-watch'
       disabled: true
     # Lets another Session hand work over; replies go back into that Session (docs/012-dispatcher.md).
     - id: dsh-superagent-session
-      name: dsh-superagent/session-watch
+      name: '@vfvrpq/dsh-superagent/session-watch'
     # The agent preset of every Executor Session (WORKER_PRESET in src/app/sessions.ts); the main Session has its own, below.
     # It is DSH's `standard` preset with only what a worker needs, and a shell whose foreground command moves to a background job
     # after 5 seconds, so a long command does not hold back a person's message, which the Session takes at its next step. Left
@@ -131,7 +131,7 @@
     # no other section.
     # The bare claim tool, so a Session started with the router preset can take the dispatcher role on request.
     - id: dsh-superagent-claim
-      name: dsh-superagent/claim
+      name: '@vfvrpq/dsh-superagent/claim'
     - id: dsh-superagent-router-preset
       name: '@deepseek-ai/dsh-agent-preset'
       config:
