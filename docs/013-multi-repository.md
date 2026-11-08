@@ -186,3 +186,16 @@ thread = github:5
 ```
 
 要改的位置：`githubChannel`（加可选 repository）、`github.ts` 里 `ctx.threads.patch/describe` 的几处硬编码、`github-pull.ts` 两处、`migration.ts` 一处。改动面 5 个文件，且涉及既有线程键的兼容，需单独一轮并迁移验证。
+
+## 缺陷已修：线程键带仓（`4634438`）
+
+`stamped()` 现在为非默认仓改写线程键与回复地址：
+
+```
+默认仓      github:<number>
+其它仓      github:<owner>/<name>#<number>
+```
+
+实测（开发实例）：第二个仓的 issue 产生 `thread=github:439436269-ctrl/superagent-second#6`，默认仓的旧线程 `github:5` 不受影响。
+
+改法只在 `stamped()` 一处（三份），**没有改任何函数签名**——上一轮尝试在行内做字符串替换，把合法的模板字符串吞掉了，已回滚；最终用「Node 脚本按行号 splice」完成。

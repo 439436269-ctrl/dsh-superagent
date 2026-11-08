@@ -87,3 +87,16 @@
 **钉钉接入方式已变更**：不走 HTTP 回调与隧道，改为 **Stream 长连接**（`examples/im-bridges/dingtalk-stream.mjs`，`/v1.0/gateway/connections/open` 拿 endpoint+ticket，WebSocket 收 `CALLBACK`）。钉钉后台那个「重定向URL」不需要填。`dws`（官方 CLI）需要 OAuth 登录，本方案不依赖它。
 
 **未验证**：两个钉钉机器人各收一条消息；两个仓库各跑一张工单。
+
+## 多仓验证记录（2026-11-08 深夜）
+
+**已实测**：
+- 第二仓 `439436269-ctrl/superagent-second`（私有，agent 有 push）被列表轮询发现 → `received=1` → 进入判定
+- 线程键带仓：`github:439436269-ctrl/superagent-second#6`
+- 默认仓旧线程键 `github:5` 不受影响
+
+**修掉的三连环 bug**：轮询读未填充的 `deployment.repositories`；把游标名当流 id 传（`id === 'issues'` 判断失败退化成 comments 分支）；304 提前 return 导致坏游标永远修不好。
+
+**仍未验证**：多仓工单的 worktree 落点与 PR 归属——需要先给开发实例配评估模型（当前判定是 `unavailable`），否则工单根本出不来。
+
+**多源仍未验证**：两个钉钉机器人各收一条消息（`im=1`、`im-2=0`）。
