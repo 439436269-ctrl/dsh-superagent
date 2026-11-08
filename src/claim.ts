@@ -15,6 +15,7 @@ export const inject = ['tools', 'orchestrator']
 interface DispatcherHost {
   setDispatcher(id: string | null): { dispatcher: string }
   dispatcher(): Promise<{ id: string; available: boolean; running: boolean }>
+  inbound(from: string, text: string, intent: 'request' | 'delegate', signal: AbortSignal): Promise<{ delivered: string }>
 }
 
 export function apply(ctx: Context): void {
@@ -29,6 +30,25 @@ export function apply(ctx: Context): void {
       if (!id) throw new Error('This call carries no Session, so there is nothing to claim')
       host.setDispatcher(id)
       return { dispatcher: id, claimed: true }
+    },
+  })
+
+  // Any Session can ask the dispatcher for work or hand work over; the Session id comes from the execution, so the
+  // message always names its real sender.
+  ctx.tools.register({
+    name: 'orchestrator_notify',
+    description: 'Message the dsh-superagent dispatcher. Use intent "request" to ask it to judge and assign work, or "delegate" to hand work over. The message is labelled with this Session, so the dispatcher can answer here.',
+    parameters: { type: 'object', properties: {
+      text: { type: 'string', minLength: 1, maxLength: 4000, description: 'What to tell the dispatcher.' },
+      intent: { type: 'string', enum: ['request', 'delegate'], description: 'request: ask it to assign work. delegate: hand work over.' },
+    }, required: ['text', 'intent'], additionalProperties: false },
+    output: { schema: { type: 'object', additionalProperties: true }, render: (_args: unknown, value: unknown) => [{ type: 'text' as const, text: JSON.stringify(value) }] },
+    execute: async (args: unknown, exec: { agent?: { id?: string }; signal?: AbortSignal }) => {
+      const id = exec?.agent?.id
+      if (!id) throw new Error('This call carries no Session, so the message has no sender')
+      const { text, intent } = args as { text?: string; intent?: 'request' | 'delegate' }
+      if (!text?.trim()) throw new Error('The message is empty')
+      return host.inbound(id, text.trim(), intent === 'delegate' ? 'delegate' : 'request', exec?.signal ?? AbortSignal.timeout(30_000))
     },
   })
 }
