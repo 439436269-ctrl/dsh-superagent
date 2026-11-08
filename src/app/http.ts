@@ -33,6 +33,8 @@ export interface HttpHost {
   dispatcher(): Promise<{ id: string; available: boolean; running: boolean; note?: string }>
   /** Records the Session that judges and assigns work; null clears it back to the default. */
   setDispatcher(id: string | null): { dispatcher: string }
+  /** Restarts the plugin shortly, so a Source instance added just now starts its loop. */
+  restartSoon(delayMs?: number): void
   /** Sessions this Host can name as the dispatcher. */
   sessionsList(): Promise<{ id: string; running: boolean; cwd: string }[]>
   readonly store: Store
@@ -212,6 +214,8 @@ function routes(runtime: HttpHost): Routes {
         // kind it runs; an existing instance is known already and keeps the check below for typos.
         const declares = typeof (request.value as { kind?: unknown } | null)?.kind === 'string'
         if (!exists && !declares) throw new RouteError(404, 'Source not found')
+        // A new instance only starts its loop when the plugin restarts.
+        if (!exists) runtime.restartSoon()
       }
       return runtime.settings.save(block, request.value, request.revision, 'panel')
     },
