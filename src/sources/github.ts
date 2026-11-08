@@ -191,11 +191,18 @@ const STREAMS = [
 async function pollRepository(ctx: SourceContext, round: Round): Promise<void> {
   const config = ctx.config<GithubConfig>(SOURCE)
   if (!config) return
-  for (const stream of STREAMS) {
-    if (stopped(ctx, round)) return
-    if (!stream.observed(config)) { ctx.state.set(KV.github.stream(stream.id), undefined); continue }
-    try { await readStream(ctx, round, stream.id, stream.path, config, ctx.deployment.repository) }
-    catch (error) { if (!stopped(ctx, round)) round.failures.push(`${stream.id}: ${String(error)}`) }
+  // The Source's own list is what the panel writes; the deployment names only the default repository.
+  const served = config.repositories.length ? config.repositories : [ctx.deployment.repository]
+  for (const repository of served) {
+    for (const stream of STREAMS) {
+      if (stopped(ctx, round)) return
+      // The default repository keeps the original key so existing cursors and their tests are untouched; every other
+      // repository needs its own cursor, or two repositories would skip each other's items.
+      const name = repository === ctx.deployment.repository ? stream.id : `${repository}:${stream.id}`
+      if (!stream.observed(config)) { ctx.state.set(KV.github.stream(name), undefined); continue }
+      try { await readStream(ctx, round, name, stream.path, config, repository) }
+      catch (error) { if (!stopped(ctx, round)) round.failures.push(`${name}: ${String(error)}`) }
+    }
   }
   // When CI observation is turned off, clear the failure baseline but preserve the revision counter so future triggers have unique IDs.
   if (!config.observeCi) {
@@ -229,7 +236,7 @@ async function readStream(ctx: SourceContext, round: Round, id: string, path: st
   const conditional = stored?.etag && stored.since === since ? ['-H', `If-None-Match: ${stored.etag}`] : []
   let raw: string
   const listed = `${path}&sort=updated&direction=asc&per_page=100&since=${encodeURIComponent(since)}`
-  try { raw = await ctx.commands.withSignal(round.signal).api(listed, '--include', ...conditional) }
+  try { raw = await ctx.commands.forRepository(repository).withSignal(round.signal).api(listed, '--include', ...conditional) }
   catch (error) {
     if (error instanceof CliError && error.code === 304) return
     throw error
