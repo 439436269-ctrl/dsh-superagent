@@ -1,5 +1,6 @@
 import { spawn } from 'node:child_process'
 import { afterAll, describe, expect, it } from 'vitest'
+// @ts-expect-error -- the bridge core is plain ESM, shipped without type declarations
 import { sign } from '../examples/im-bridges/dingtalk-core.mjs'
 
 /** Starts the bridge and resolves once it reports the port it listens on. */
