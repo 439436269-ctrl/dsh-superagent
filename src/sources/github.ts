@@ -192,7 +192,8 @@ async function pollRepository(ctx: SourceContext, round: Round): Promise<void> {
   const config = ctx.config<GithubConfig>(SOURCE)
   if (!config) return
   // The Source's own list is what the panel writes; the deployment names only the default repository.
-  const served = config.repositories.length ? config.repositories : [ctx.deployment.repository]
+  // The default repository is always served; the list adds repositories beside it.
+  const served = [ctx.deployment.repository, ...config.repositories.filter(name => !sameName(name, ctx.deployment.repository))]
   for (const repository of served) {
     for (const stream of STREAMS) {
       if (stopped(ctx, round)) return
