@@ -133,7 +133,8 @@ export function apply(ctx: Context): void {
   ctx.effect(() => ctx.orchestrator.sources.register(feishuKind), 'feishu: source kind')
   ctx.effect(() => {
     // One loop per instance: each runs its own consumer with its own bot credentials.
-    const instances = ctx.orchestrator.sources.instances().filter(instance => instance.kind === feishuKind.kind)
+    // A disabled instance runs no loop: it would start a consumer nobody asked for and report its health over the ones that work.
+    const instances = ctx.orchestrator.sources.instances().filter(instance => instance.kind === feishuKind.kind && instance.enabled)
     const controllers: AbortController[] = []
     const running = instances.map(instance => {
       const controller = new AbortController()
