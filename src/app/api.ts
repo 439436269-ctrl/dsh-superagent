@@ -19,6 +19,7 @@ type Delivery = 'injected' | 'pending'
 
 export interface Api {
   'GET state': { response: StateView }
+  'GET dispatcher': { response: { id: string; available: boolean; running: boolean } }
   'GET overview': { response: OverviewView }
   'GET search': { query: { q: string }; response: SearchView }
   'GET sources': { response: SourceStatusView[] }
