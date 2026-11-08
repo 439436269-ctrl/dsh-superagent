@@ -233,3 +233,23 @@ thread = github:5
 - 同仓同类请求 → 被已有工单判为重复（合理）
 
 **先确认测试数据本身有效，再怀疑实现。**
+
+## 已知缺陷：PR 编号跨仓不唯一（2026-11-08 23:40）
+
+`pullsOf(ticket)` 返回的是**纯编号**（`src/sources/github-pull.ts:19`），而 `pollTicketPulls` 拿编号去默认仓的 `Commands` 读：
+
+```ts
+const numbers = [...new Set(ctx.tickets.open().flatMap(ticket => pullsOf(ticket, true)))]
+for (const number of numbers) { const pr = await pull(ctx, round, number) }   // ← ctx.commands = 默认仓
+```
+
+后果（实测）：第二仓的 PR #18 已合并，工单仍停在 `working`——轮询去默认仓找 #18，那里要么没有要么是另一条 PR。
+
+同一处的其它受害者：`claimPull`、`pullEndNotices`、`observePull` 都用编号匹配 `follows`，两个仓的同号 PR 会互相认领。
+
+**修法**（需要数据模型改动，未实施）：
+1. `follows` 里记的从 `number` 改为 `repository#number`（或增加 `repository` 字段）
+2. `pullsOf` 返回 `{ repository, number }`，`pollTicketPulls` 按仓取 `commands.forRepository(repository)`
+3. 迁移：既有 `follows` 里的纯编号视为默认仓
+
+这与线程键的修法（`github:<owner>/<name>#<n>`）是同一个模式：**凡是"编号当身份"的地方，多仓下都要带上仓库**。
