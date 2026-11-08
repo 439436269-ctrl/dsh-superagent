@@ -113,7 +113,10 @@ export class Runtime extends Service implements SourceHost {
     // reader, and a stored default would be indistinguishable from a claim in the panel.
     if (id) this.store.set(KV.runtime.dispatcher, id)
     else this.store.delete(KV.runtime.dispatcher)
-    this.restart()
+    // Restarting while this Session still has a turn in flight re-registers its tools into a conversation that already
+    // declared them; DSH marks those re-registrations as deferred loading, and the provider then rejects a request whose
+    // tools are all deferred. Let the turn finish first.
+    setTimeout(() => this.restart(), 15_000)
     return { dispatcher: id ?? this.defaultMasterId }
   }
   /** The id derived from the directories: what the dispatcher is when nobody has claimed it. */
