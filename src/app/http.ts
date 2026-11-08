@@ -31,6 +31,8 @@ import { executorLoad, ticketDetail, ticketList } from './views/tickets.ts'
 export interface HttpHost {
   /** The Session that judges and assigns work, and whether this Host can reach it. */
   dispatcher(): Promise<{ id: string; available: boolean; running: boolean }>
+  /** Records the Session that judges and assigns work; null clears it back to the default. */
+  setDispatcher(id: string | null): { dispatcher: string }
   readonly store: Store
   /** Feishu message links resolved since startup, used by search to match AppLink URLs. */
   readonly sourceLinks: Pick<TextCache, 'entries'>
@@ -157,6 +159,7 @@ function routes(runtime: HttpHost): Routes {
   return {
     'GET state': () => stateView(runtime),
     'GET dispatcher': () => runtime.dispatcher(),
+    'POST dispatcher': async ({ body }) => runtime.setDispatcher(((await body(4096)) as { id?: string | null } | null)?.id ?? null),
     'GET overview': () => overview(views(runtime), runtime.health, policyVersion(store.settings()),
       executorLoad(store, runtime.executor.activeCount()), runtime.setupProblem ?? runtime.feishuProblem),
     'GET search': ({ query }) => search(views(runtime), query.q ?? '', runtime.sourceLinks),

@@ -1,4 +1,4 @@
-/**
+﻿/**
  * Typed key-value store keys and key families grouped by the single component that owns and writes each family.
  * Readers and writers refer to a record by its entry here so each key is spelled once with its value type.
  */
@@ -30,7 +30,7 @@ export const KV = {
     /** The built-in text of a prompt part an override was edited from, by its `base`, which shows what an upgrade changed. */
     builtIn: family<string, [base: string]>('prompt-built-in:') },
   /** Runtime: the main Session's ID. */
-  runtime: { masterId: record<string>('master-id') },
+  runtime: { masterId: record<string>('master-id'), dispatcher: record<string>('dispatcher') },
   /** Sessions: prompt revisions each Session has worked under, ordered oldest first; the last entry (`.at(-1)`) is its active revision. */
   sessions: { prompts: family<number[], [session: string]>('session-prompts:') },
   /** Schema 11 migration: legacy main-Session queues imported into the effect table. */
