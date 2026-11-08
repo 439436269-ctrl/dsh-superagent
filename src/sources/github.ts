@@ -1,6 +1,6 @@
 /** GitHub source kind definition, notification and repository polling loops, and Cordis plugin entry. */
 import type { Context } from '@deepseek-ai/cordis'
-import { key, type Thread } from '../core/index.ts'
+import { key, type Thread, type Trigger } from '../core/index.ts'
 import { sameName } from '../infra/text.ts'
 import { GithubAccountsSchema } from '../deployment.ts'
 import { CliError, validItems, type Tally } from '../infra/commands.ts'
@@ -187,7 +187,7 @@ async function pollRepository(ctx: SourceContext, round: Round): Promise<void> {
   for (const stream of STREAMS) {
     if (stopped(ctx, round)) return
     if (!stream.observed(config)) { ctx.state.set(KV.github.stream(stream.id), undefined); continue }
-    try { await readStream(ctx, round, stream.id, stream.path, config) }
+    try { await readStream(ctx, round, stream.id, stream.path, config, ctx.deployment.repository) }
     catch (error) { if (!stopped(ctx, round)) round.failures.push(`${stream.id}: ${String(error)}`) }
   }
   // When CI observation is turned off, clear the failure baseline but preserve the revision counter so future triggers have unique IDs.
@@ -205,7 +205,9 @@ async function pollRepository(ctx: SourceContext, round: Round): Promise<void> {
  * unchanged (including when clamped to the hourly horizon), sending the last page's ETag makes an unchanged list return
  * HTTP 304 and cost no rate limit. Items from before their kind was switched on or beyond the horizon are ignored.
  */
-async function readStream(ctx: SourceContext, round: Round, id: string, path: string, config: GithubConfig): Promise<void> {
+async function readStream(ctx: SourceContext, round: Round, id: string, path: string, config: GithubConfig, repository: string): Promise<void> {
+  // Every Trigger from this poll names the repository it came from, so the ticket it becomes knows where it works.
+  const stamped = (trigger: Trigger): Trigger => ({ ...trigger, meta: { ...trigger.meta, repository } })
   const name = KV.github.stream(id)
   const stored = ctx.state.get(name)
   const kinds = id === 'issues' ? [...config.observeIssues ? ['issues'] : [], ...config.observePulls ? ['pulls'] : []] : ['comments']
@@ -234,7 +236,7 @@ async function readStream(ctx: SourceContext, round: Round, id: string, path: st
       const issue = IssueSchema.safeParse(item)
       const pr = issue.success && !!issue.data.pull_request
       if (!issue.success || !fresh(issue.data.created_at, pr ? 'pulls' : 'issues')) continue
-      await ctx.receive(pr ? pullTrigger(issue.data, login) : issueTrigger(issue.data, login))
+      await ctx.receive(stamped(pr ? pullTrigger(issue.data, login) : issueTrigger(issue.data, login)))
       nameThread(ctx, issue.data.number, issue.data.title)
       continue
     }
