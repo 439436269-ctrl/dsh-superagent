@@ -100,3 +100,22 @@
 **仍未验证**：多仓工单的 worktree 落点与 PR 归属——需要先给开发实例配评估模型（当前判定是 `unavailable`），否则工单根本出不来。
 
 **多源仍未验证**：两个钉钉机器人各收一条消息（`im=1`、`im-2=0`）。
+
+## 未结问题：第二仓的新 issue 被静默丢弃（2026-11-08 23:37）
+
+现象：
+- 第二仓 `439436269-ctrl/superagent-second` 的 issue #5 **成功**产生触发（`received` +1，判定 `github:…#5`）
+- 之后的 #6/#7 产生判定但都是 `unavailable`（当时是我的测试数据中文写成 `?`，模型判断正确）
+- 修好数据后新建的 #9、#10 **完全没有触发**：`received` 停在 3，判定记录不再增长
+
+已排除：
+- 游标 `since` 正常推进（14:32:15），新 issue 的 `updated_at` 晚于它
+- `started.issues` = 14:13:59，新 issue 的 `created_at` 晚于它，`fresh()` 应当通过
+- `filtered` / `dropped` 计数都是 0 —— 但这两个计数**不统计该丢弃路径**，属于可观测性缺陷
+
+待查（`readStream`，`src/sources/github.ts:222-276`）：
+1. `if (sameName(item.user.login, login)) continue` —— 若 `deployment.github.login` 是 operator 账号，operator 自己开的 issue 会被当作"自己的"跳过
+2. `IssueSchema.safeParse(item)` 是否对新 issue 失败（失败也是静默 `continue`）
+3. `validItems(ListedSchema, …)` 是否在进入循环前就把条目过滤掉
+
+建议做法：在这三处 `continue` 前各记一次计数（写进 health detail 或临时 KV），跑一轮看落在哪，再修并删掉诊断。
