@@ -106,7 +106,8 @@ export async function runIm(ctx: SourceContext, signal: AbortSignal): Promise<vo
 function listen(ctx: SourceContext, config: ImConfig, signal: AbortSignal): Promise<void> {
   const args = [...splitArgs(config.args), 'receive']
   return new Promise((resolve, reject) => {
-    const child = spawn(config.command, args, { stdio: ['ignore', 'pipe', 'pipe'], windowsHide: true })
+    // This instance's own environment comes last, so it can override a shared credential without touching the service.
+  const child = spawn(config.command, args, { stdio: ['ignore', 'pipe', 'pipe'], windowsHide: true, env: { ...process.env, ...config.env } })
     let settled = false
     let stderr = ''
     const finish = (error?: Error): void => {

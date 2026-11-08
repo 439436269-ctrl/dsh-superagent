@@ -204,9 +204,15 @@ function routes(runtime: HttpHost): Routes {
     'POST executor/pause': async ({ body }) => runtime.settings.pause(z.object({ paused: z.boolean() }).parse(await body()).paused, 'panel'),
     'PUT settings/:block': async ({ params, body }) => {
       const block = SettingsBlockSchema.parse(params.block)
-      const known = !block.startsWith('source:') || runtime.sources.instances().some(instance => `source:${instance.id}` === block)
-      if (!known) throw new RouteError(404, 'Source not found')
       const request = SaveRequest.parse(await body())
+      if (block.startsWith('source:')) {
+        const id = block.slice('source:'.length)
+        const exists = runtime.sources.instances().some(instance => instance.id === id)
+        // A second instance of a running kind does not exist yet when it is first saved, so the request has to say which
+        // kind it runs; an existing instance is known already and keeps the check below for typos.
+        const declares = typeof (request.value as { kind?: unknown } | null)?.kind === 'string'
+        if (!exists && !declares) throw new RouteError(404, 'Source not found')
+      }
       return runtime.settings.save(block, request.value, request.revision, 'panel')
     },
     'GET policy/history': () => policyHistory(store, runtime.sources, policyVersion(store.settings())),
