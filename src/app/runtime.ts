@@ -168,6 +168,11 @@ export class Runtime extends Service implements SourceHost {
       this.toolHost = { context: ctx, engine, store, prompts, sessions, settings: this.settings, assessor, resources,
         bus: new SessionBus({ stateDir: machine.stateDir, control: ctx.sessionController as unknown as DshSessionControl }),
         get github() { return runtime.context({ kind: 'github', health: ['github'] }) },
+        dispatcher: async (text: string, signal: AbortSignal) => {
+          if (!runtime.toolHost.bus.dsh) throw new Error('This Host exposes no Session service')
+          await runtime.toolHost.bus.dsh.message(masterId, text, signal)
+          return { delivered: true }
+        },
         requestPass: () => { passes.request() }, sendReplies: () => outbox.sent(),
         quietly: run => { this.quiet++; try { return run() } finally { this.quiet-- } } }
       this.ready = this.initialize()
