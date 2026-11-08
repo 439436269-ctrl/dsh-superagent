@@ -16,8 +16,11 @@ const gone = (error: unknown): boolean => error instanceof CliError
 const missing = (error: unknown): boolean => error instanceof CliError && (error.code === 404 || error.code === 410)
 /** Posts a comment or review-thread reply with an embedded HTML marker so retries do not create duplicate comments. */
 export async function sendGithub(host: Pick<SourceContext, 'commands'>, message: OutboundMessage): Promise<'sent' | 'gone'> {
-  const { commands } = host
-  const { repository, github } = commands.deployment
+  // A reply goes to the repository its Thread belongs to; a single-repository deployment names none and gets the default.
+  const named = (message.channel.address as { repository?: string }).repository
+  const repository = named || host.commands.deployment.repository
+  const commands = host.commands.forRepository(repository)
+  const github = host.commands.deployment.github
   const number = Number(message.channel.address.number)
   if (!number) throw new Error('Missing GitHub reply target')
   try {
