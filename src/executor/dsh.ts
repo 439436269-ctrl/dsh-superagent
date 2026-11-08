@@ -240,7 +240,10 @@ export class DshExecutor implements Executor {
   }
   /** Populates a newly accepted ticket's `execution` attributes (worktree name, workspace directory, and assignment text). */
   prepare(ticket: Ticket, outcome: Extract<AssessmentOutcome, { kind: 'accept' }>): Ticket {
-    return { ...ticket, execution: ticketExecution(ticket, outcome, this.host.store.settings(), this.host.machine.stateDir) }
+    const settings = this.host.store.settings()
+    // The default repository is the one the GitHub Source names; a ticket working elsewhere gets its own subtree.
+    const configured = settings.sources.github?.config as { repository?: string } | undefined
+    return { ...ticket, execution: ticketExecution(ticket, outcome, settings, this.host.machine.stateDir, configured?.repository || undefined) }
   }
   /**
    * Runs the configured `executor.prepare` command for a new ticket workspace in its parent directory with the ticket's
