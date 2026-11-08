@@ -250,14 +250,17 @@ async function readStream(ctx: SourceContext, round: Round, id: string, path: st
   const { login } = ctx.deployment.github
   const fresh = (at: string | null | undefined, kind: string) =>
     kind in started && Date.parse(at ?? '') >= Math.max(Date.parse(started[kind]!), horizon)
+  // Why items of a list are left behind, so a silently skipped issue can be explained instead of guessed at.
+  const skipped = { own: 0, unparsed: 0, stale: 0, noText: 0 }
   for (const item of items) {
     // Stopping mid-stream aborts before advancing the cursor so unread items are retried.
     if (stopped(ctx, round)) throw new Error('The GitHub Source stopped during the poll')
-    if (sameName(item.user.login, login)) continue
+    if (sameName(item.user.login, login)) { skipped.own++; continue }
     if (id === 'issues') {
       const issue = IssueSchema.safeParse(item)
       const pr = issue.success && !!issue.data.pull_request
-      if (!issue.success || !fresh(issue.data.created_at, pr ? 'pulls' : 'issues')) continue
+      if (!issue.success) { skipped.unparsed++; continue }
+      if (!fresh(issue.data.created_at, pr ? 'pulls' : 'issues')) { skipped.stale++; continue }
       await ctx.receive(stamped(pr ? pullTrigger(issue.data, login) : issueTrigger(issue.data, login)))
       nameThread(ctx, issue.data.number, issue.data.title)
       continue
@@ -268,7 +271,9 @@ async function readStream(ctx: SourceContext, round: Round, id: string, path: st
     const ref = { number, isPr, ...item.html_url ? { url: item.html_url } : {} }
     const trigger = commentTrigger(item, ref, id === 'comments' ? 'conversation' : 'inline', login)
     if (trigger.text) await ctx.receive(trigger)
+    else skipped.noText++
   }
+  ctx.state.set('github-skipped', { repository, stream: id, fetched: items.length, ...skipped, at: new Date().toISOString() })
   const newest = Math.max(...items.map(item => Date.parse(item.updated_at ?? '')).filter(Number.isFinite))
   const moved = Number.isFinite(newest) ? cursorAt(new Date(newest).toISOString()) : since
   const next = Date.parse(moved) > Date.parse(since) ? moved : since
