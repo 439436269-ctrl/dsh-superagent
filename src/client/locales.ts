@@ -120,6 +120,8 @@ const TEXT = {
   'dispatcherPlaceholder': ['会话 id，例如 session-…', 'A Session id, such as session-…'],
   'dispatcherSet': ['设为调度者', 'Use this Session'],
   'dispatcherReset': ['恢复默认', 'Back to the default'],
+  'dispatcherUse': ['设为调度者', 'Use this Session'],
+  'dispatcherNoSessions': ['没有其他可选的会话', 'No other Session to choose'],
   'dispatcherId': ['调度者会话', 'Dispatcher Session'],
   'dispatcherReachable': ['可达', 'Reachable'],
   'dispatcherRunning': ['正在工作', 'Working now'],

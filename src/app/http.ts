@@ -33,6 +33,8 @@ export interface HttpHost {
   dispatcher(): Promise<{ id: string; available: boolean; running: boolean }>
   /** Records the Session that judges and assigns work; null clears it back to the default. */
   setDispatcher(id: string | null): { dispatcher: string }
+  /** Sessions this Host can name as the dispatcher. */
+  sessionsList(): Promise<{ id: string; running: boolean; cwd: string }[]>
   readonly store: Store
   /** Feishu message links resolved since startup, used by search to match AppLink URLs. */
   readonly sourceLinks: Pick<TextCache, 'entries'>
@@ -160,6 +162,7 @@ function routes(runtime: HttpHost): Routes {
     'GET state': () => stateView(runtime),
     'GET dispatcher': () => runtime.dispatcher(),
     'POST dispatcher': async ({ body }) => runtime.setDispatcher(((await body(4096)) as { id?: string | null } | null)?.id ?? null),
+    'GET dispatcher/sessions': () => runtime.sessionsList(),
     'GET overview': () => overview(views(runtime), runtime.health, policyVersion(store.settings()),
       executorLoad(store, runtime.executor.activeCount()), runtime.setupProblem ?? runtime.feishuProblem),
     'GET search': ({ query }) => search(views(runtime), query.q ?? '', runtime.sourceLinks),

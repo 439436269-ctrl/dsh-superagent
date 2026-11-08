@@ -293,6 +293,7 @@ const SourceSave = z.object({ enabled: z.boolean(), config: z.unknown() })
 const ROUTES: { [K in keyof Api]: Route<K> } = {
   'GET dispatcher': { answer: () => ({ id: 'orchestrator-test', available: true, running: false }) },
     'POST dispatcher': { body: true, answer: () => ({ dispatcher: '' }) },
+    'GET dispatcher/sessions': { answer: () => ([]) },
     'GET state': { answer: stateView },
   'GET overview': { answer: overviewView },
   'GET search': { query: ['q'], answer: async ({ query }) => {
