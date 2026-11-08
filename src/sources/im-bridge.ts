@@ -75,12 +75,13 @@ export function imTrigger(message: ImMessage, bridge: string, args: string[]): T
 
 const rest = async (ms: number, signal: AbortSignal): Promise<void> => { await delay(ms, undefined, { signal }).catch(() => { /* aborted */ }) }
 
+/** Names the instance on a Trigger's Channel when it is not the kind's default one, so admission resolves that instance's chats. */
+const stampInstance = <T extends { channel?: { address: Record<string, string> } }>(trigger: T, instance: string): T =>
+  instance === 'im' || !trigger.channel ? trigger
+    : { ...trigger, channel: { ...trigger.channel, address: { ...trigger.channel.address, instance } } }
+
 /** Runs the bridge for as long as the Source is on, restarting it with a bounded backoff when it exits. */
 export async function runIm(ctx: SourceContext, signal: AbortSignal, instance = 'im'): Promise<void> {
-  // Admission resolves a Channel's instance by name; without it a second instance is checked against the default one's chats.
-  const own = <T extends { channel?: { address: Record<string, string> } }>(trigger: T): T =>
-    instance === 'im' || !trigger.channel ? trigger
-      : { ...trigger, channel: { ...trigger.channel, address: { ...trigger.channel.address, instance } } }
   await ctx.ready
   let failures = 0
   while (!signal.aborted) {
@@ -93,7 +94,7 @@ export async function runIm(ctx: SourceContext, signal: AbortSignal, instance = 
     }
     const started = Date.now()
     try {
-      await listen(ctx, config, signal)
+      await listen(ctx, config, signal, instance)
       if (signal.aborted) return
       failures = Date.now() - started < 5000 ? failures + 1 : 0
       ctx.report('im', { state: failures ? 'error' : 'starting', detail: `The bridge exited; restarting (attempt ${failures + 1})` })
@@ -107,7 +108,7 @@ export async function runIm(ctx: SourceContext, signal: AbortSignal, instance = 
 }
 
 /** Spawns the bridge, ingests its lines until it exits, and resolves when it ends. */
-function listen(ctx: SourceContext, config: ImConfig, signal: AbortSignal): Promise<void> {
+function listen(ctx: SourceContext, config: ImConfig, signal: AbortSignal, instance = 'im'): Promise<void> {
   const args = [...splitArgs(config.args), 'receive']
   return new Promise((resolve, reject) => {
     // This instance's own environment comes last, so it can override a shared credential without touching the service.
@@ -128,12 +129,12 @@ function listen(ctx: SourceContext, config: ImConfig, signal: AbortSignal): Prom
     ctx.report('im', { state: 'ready', detail: `The bridge runs ${config.command}`, at: new Date().toISOString() })
     let queue = Promise.resolve()
     const lines = createInterface({ input: child.stdout })
-    lines.on('line', (line: string) => { queue = queue.then(() => ingest(ctx, config, line)).catch(() => { /* a bad line never stops the bridge */ }) })
+    lines.on('line', (line: string) => { queue = queue.then(() => ingest(ctx, config, line, instance)).catch(() => { /* a bad line never stops the bridge */ }) })
   })
 }
 
 /** Applies one bridge line: a message becomes a Trigger, names refresh the chat labels, logs are ignored. */
-async function ingest(ctx: SourceContext, config: ImConfig, line: string): Promise<void> {
+async function ingest(ctx: SourceContext, config: ImConfig, line: string, instance = 'im'): Promise<void> {
   if (!line.trim()) return
   let value: unknown
   try { value = JSON.parse(line) } catch { return }
@@ -141,7 +142,7 @@ async function ingest(ctx: SourceContext, config: ImConfig, line: string): Promi
   if (message.success) {
     const trigger = imTrigger(message.data, config.command, splitArgs(config.args))
     if (!trigger) return
-    await ctx.receive(trigger)
+    await ctx.receive(stampInstance(trigger, instance))
     if (message.data.chatName) labels(ctx, { [message.data.chat]: message.data.chatName })
     ctx.threads.describe(`${SOURCE}:${message.data.chat}`, { label: message.data.chatName ?? message.data.chat })
     return

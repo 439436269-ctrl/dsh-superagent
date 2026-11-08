@@ -217,7 +217,9 @@ function routes(runtime: HttpHost): Routes {
         if (!exists && !declares) throw new RouteError(404, 'Source not found')
         // A new instance only starts its loop when the plugin restarts.
         // A Source's loops are built when the plugin starts, so a new instance and a disabled one both need a restart.
-        if (!exists || (current?.enabled === true && (request.value as { enabled?: boolean } | null)?.enabled === false)) runtime.restartSoon()
+        // A Source's loops are built when the plugin starts, so a new instance and any instance whose enabled flag changed need one.
+        const next = (request.value as { enabled?: boolean } | null)?.enabled
+        if (!exists || (current !== undefined && next !== undefined && current.enabled !== next)) runtime.restartSoon()
       }
       return runtime.settings.save(block, request.value, request.revision, 'panel')
     },
