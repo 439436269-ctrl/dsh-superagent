@@ -118,7 +118,8 @@ export function apply(ctx: Context): void {
   ctx.effect(() => {
     // One loop per instance of this kind: each bridge reads its own configuration, so two chat tools never share a
     // process, a cursor, or credentials.
-    const instances = ctx.orchestrator.sources.instances().filter(instance => instance.kind === imKind.kind)
+    // A disabled instance runs no loop: it would start a bridge nobody asked for and report its health over the ones that work.
+    const instances = ctx.orchestrator.sources.instances().filter(instance => instance.kind === imKind.kind && instance.enabled)
     const controllers: AbortController[] = []
     const running = instances.map(instance => {
       const controller = new AbortController()

@@ -290,3 +290,25 @@ for (const number of numbers) { const pr = await pull(ctx, round, number) }   //
 4. 面板与 `/sources` 按实例列出
 
 改哪三处：`src/sources/registry.ts`（`register` 与 `healthEntries`）、`src/app/source-context.ts`（`health` 与 `report`）、`tests/sources.spec.ts`（健康条目预期）。
+
+## 已修：停用的实例会污染同类实例的健康显示（`dc0b6c2` 之后）
+
+实测复现：三个 `im` 实例（两个钉钉 + 一个企业微信）全部 `ready` 时，把 `im-3` 设为 `enabled: false`，**`im` 和 `im-2` 一起变成 `paused — The IM Source has no bridge command`**，而它们其实在正常工作。
+
+根因是两层叠加：
+
+1. 健康条目**按 kind 共用一条**，最后写入者覆盖
+2. 停用的实例仍会起循环，而它解析出的 `config` 是 `undefined`，于是往共用条目里写 `paused`
+
+修法（minimal）：构建循环时直接跳过停用的实例——
+
+```ts
+const instances = sources.instances().filter(i => i.kind === imKind.kind && i.enabled)
+```
+
+`im.ts` 与 `feishu.ts` 同样处理。效果：
+
+- 停用 `im-3` 后，`im` / `im-2` 保持 `ready`，桥进程从 3 个正确降到 2 个
+- 停用不再需要重启才生效（历史问题一并消除）
+
+**仍未做**：多个**启用**实例之间的健康区分（它们共用一条文案，都健康时显示 `ready` 是正确的，只是分不清谁是谁）。危害已消除，属于纯展示问题。
