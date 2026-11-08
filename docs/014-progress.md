@@ -76,3 +76,14 @@
 ## 下一件事
 
 `docs/013` **阶段 1**：`Ticket` 加 `repository` 字段，缺省回落配置的默认仓，迁移既有工单。只加字段、不改行为，可单独回滚。
+## 2026-11-08 晚：多仓五阶段 + 多源主体完成
+
+**多仓**：五阶段全部落地（见 `docs/013` 的实施状态表）。单仓部署行为不变；缺双仓端到端实测。
+
+**多源**：`settings.sources` 现在支持「实例 id ≠ kind」，实例在条目里声明 `kind`；`SourceContext` 绑定实例、`config()` 无参取绑定实例；`im` 与 `feishu` 都按实例起循环；每实例可用 `config.env` 携带自己的凭据；新建实例会自动重启使循环生效。
+
+实机：开发实例 `im`（yoga-dsh机器人）与 `im-2`（yoga-dsh小钉）同时 ready，两个独立的桥进程。
+
+**钉钉接入方式已变更**：不走 HTTP 回调与隧道，改为 **Stream 长连接**（`examples/im-bridges/dingtalk-stream.mjs`，`/v1.0/gateway/connections/open` 拿 endpoint+ticket，WebSocket 收 `CALLBACK`）。钉钉后台那个「重定向URL」不需要填。`dws`（官方 CLI）需要 OAuth 登录，本方案不依赖它。
+
+**未验证**：两个钉钉机器人各收一条消息；两个仓库各跑一张工单。

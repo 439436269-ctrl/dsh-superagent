@@ -132,3 +132,35 @@ ctx.effect(() => ctx.orchestrator.sources.register(feishuKind), 'feishu: source 
 多源不能靠改 schema 完成，需要一次**贯穿 SourceContext 的改造**。在此之前，可行的是：
 - 同一 kind 只跑一个实例（今天的状态）
 - 不同 kind 可以同时跑（飞书 + 钉钉 + IM，已验证 `im` 与 `feishu` 并存）
+
+## 实施状态（2026-11-08）
+
+多仓五阶段**代码全部完成**，每阶段独立提交：
+
+| 阶段 | 提交 | 内容 |
+|---|---|---|
+| 1 | `bfc7a41` | `Ticket.repository`，建单时从 `trigger.meta.repository` 填充 |
+| 2 | `38d0347` `163d7a7` `6073beb` `98fb798` `549fe46` `b43b84a` | 来源与部署接受多仓；通知与 PR 归属按仓集合；触发把仓写进 `meta` 与回复地址 |
+| 3 | `6af3800` `06a4db9` `78508c3` | `DSH_SUPERAGENT_GITHUB_REPOSITORY` 按工单；worktree 落在 `<root>/<owner>/<name>/`；默认仓接线 |
+| 4 | `0c85f8b` `941f624` `f70e19c` | 回复与读 PR 按工单的仓 |
+| 5 | `29fe6c8` | 面板可编辑额外仓库列表 |
+
+**兼容性**：`repository` 仍是默认仓；`repositories` 为空时行为与改造前逐字节一致（`ticket.repository` 为空、watchtree 路径不变、触发对象不变）。
+
+**未验证**：没有真的用两个仓库跑过一张工单（需要第二个仓库）。代码与基线测试通过，端到端待实测。
+
+## 多源实施状态
+
+| 步骤 | 提交 | 内容 |
+|---|---|---|
+| 1 | `78a92d6` | 实例可声明 `kind`，`instances()` 按 kind 归组 |
+| 2 | `8397d08` | `instance()` / `validate()` 按声明的 kind 解析 |
+| 3 | `07ab9b5` `b28d55c` | `SourceContext` 绑定实例 id，`config()` 无参取绑定实例 |
+| 4 | `8484f6c` `09c8192` | `im` 按实例起桥循环；放开四处「id 必须等于 kind」的守卫（路由、保存、校验、parse 丢弃 kind） |
+| 4b | （合并在上） | 每实例 `config.env`，桥启动时注入 |
+| 4c | `6c19df8` | 新建实例后自动重启，循环随之启动 |
+| 4d | `bf20b2f` | `feishu` 同样按实例起消费者循环 |
+
+**实机**：开发实例同时跑 `im` 与 `im-2`（两个钉钉机器人、两个桥进程、各自凭据），均为 `ready`。
+
+**未验证**：两个机器人各收到一条消息的实测（需要人分别在群里 @ 它们）。
