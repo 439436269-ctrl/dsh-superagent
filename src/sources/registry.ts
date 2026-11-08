@@ -87,7 +87,9 @@ export class SourceRegistry implements SourceScope {
   channelAllowed(channel: { source: string; address: Record<string, string> }, settings = this.settings()): boolean {
     const kind = this.kinds.get(channel.source)
     if (!kind) return false
-    const instance = this.resolve(kind, settings.sources[channel.source])
+    // A Channel names its instance when it is not the kind's default one.
+    const id = channel.address.instance ?? channel.source
+    const instance = this.resolve(kind, settings.sources[id])
     return instance.enabled && (kind.channel?.allowed?.(channel.address, instance.config) ?? true)
   }
   /** Environment variable declarations for every installed kind, whether enabled or disabled. */

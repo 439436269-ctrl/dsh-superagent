@@ -124,7 +124,7 @@ export function apply(ctx: Context): void {
     const running = instances.map(instance => {
       const controller = new AbortController()
       controllers.push(controller)
-      return runIm(sourceContext(ctx.orchestrator, imKind, instance.id), controller.signal)
+      return runIm(sourceContext(ctx.orchestrator, imKind, instance.id), controller.signal, instance.id)
     })
     return async () => {
       for (const controller of controllers) controller.abort()
