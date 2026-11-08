@@ -84,3 +84,29 @@ in a chat, unless the event names a thread.
 
 Step 2 does not depend on step 1: an event tool plus the `session` kind is useful while the dispatcher is still the
 agent's own Session. That is the piece to build first.
+
+## Session 作为 Source（进行中）
+
+目标：别的会话发来的「委派」要能**直接成为工单**，而不是只给调度者发一句话。
+
+做法是新增一个 `session` Source kind，让委派走正常管道：
+
+```
+orchestrator_notify { intent: 'delegate' }
+  → Runtime.inbound 构造 Trigger（source: 'session', human: true, addressed: 'direct'）
+  → SourceContext.receive(trigger)（与飞书/GitHub 完全同一条路）
+  → 准入（policy.sources.session.allowed = 允许委派的会话 id）
+  → 判定 → 建单 → worker 执行 → 回复写回那个会话
+```
+
+已完成（可测，未注册）：
+
+- `src/sources/session.ts`：`sessionThreadId` / `sessionChannel` / `sessionTrigger` 三个纯构造器 + kind 定义
+- `tests/session-source.spec.ts`：3 条（同一会话同线程、触发者是人且 direct、回复地址是发送会话）
+
+待做：
+
+1. 在 `index.ts` 注册 `sessionKind`
+2. `Runtime.inbound` 的 `delegate` 分支改为 `receive(sessionTrigger(...))`
+3. `channel.send` 接到 session bus（回复写回发送会话）
+4. 面板：`session` 源的准入表（按会话 id）
