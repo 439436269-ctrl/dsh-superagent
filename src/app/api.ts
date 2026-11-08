@@ -19,7 +19,7 @@ type Delivery = 'injected' | 'pending'
 
 export interface Api {
   'GET state': { response: StateView }
-  'GET dispatcher': { response: { id: string; available: boolean; running: boolean } }
+  'GET dispatcher': { response: { id: string; available: boolean; running: boolean; note?: string } }
   'POST dispatcher': { body: { id: string | null }; response: { dispatcher: string } }
   'GET dispatcher/sessions': { response: { id: string; running: boolean; cwd: string }[] }
   'GET overview': { response: OverviewView }

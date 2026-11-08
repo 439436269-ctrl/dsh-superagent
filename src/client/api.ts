@@ -140,4 +140,4 @@ export type ThreadFacts = TicketRow['threads'][number]
 export type Actor = TriggerRow['actor']
 
 /** The Session that judges and assigns work. */
-export interface DispatcherView { id: string; available: boolean; running: boolean }
+export interface DispatcherView { id: string; available: boolean; running: boolean; note?: string }
