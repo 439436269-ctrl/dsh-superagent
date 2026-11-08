@@ -113,17 +113,19 @@ export class Runtime extends Service implements SourceHost {
     const bus = this.toolHost.bus
     if (!bus.dsh) throw new Error('This Host exposes no Session service, so the dispatcher cannot be reached')
     if (from === this.masterId) throw new Error('This Session is the dispatcher; ask it in words instead')
-    if (intent === 'delegate') {
-      // A delegation is work that has already been decided: it enters through the same pipeline as a chat message, so
-      // admission, assessment and ticketing behave exactly as they do for every other Source.
-      const context = this.context({ kind: 'session', health: [] })
-      const trigger = sessionTrigger({ session: from, id: `${Date.now()}`, text, intent })
+    // Both intents enter the pipeline the same way: `request` is a candidate the dispatcher judges, `delegate` is work
+    // it has already accepted. Only the label in meta differs, so one code path serves both and admission applies to
+    // either. A Host without the session Source falls back to messaging the dispatcher directly.
+    const context = this.context({ kind: 'session', health: [] })
+    const trigger = sessionTrigger({ session: from, id: `${Date.now()}`, text, intent })
+    try {
       await context.receive(trigger)
-      // The Trigger id is what the caller can follow up on; receive() does not return it.
       return { delivered: trigger.id }
+    } catch (error) {
+      if (intent === 'delegate') throw error
+      await bus.dsh.message(this.masterId, '[request from ' + from + ']\n\n' + text, signal)
+      return { delivered: this.masterId }
     }
-    await bus.dsh.message(this.masterId, '[' + intent + ' from ' + from + ']\n\n' + text, signal)
-    return { delivered: this.masterId }
   }
   /**
    * Records the Session that should judge and assign work, or clears the record so the default one is used again. The
