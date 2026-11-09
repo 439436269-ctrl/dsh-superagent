@@ -81,9 +81,9 @@ Published so the next version has something to fix; none of these blocks a singl
 1. **Per-instance health is shared.** Health entries are claimed per kind, so several *enabled* instances of one kind show one line. A disabled
    instance no longer writes into it (that used to make healthy siblings look broken), so what remains is cosmetic: you cannot tell which
    instance the line came from.
-2. **A second DingTalk bot has not received a message end to end.** Both bridges connect with their own credentials and DingTalk delivers to
-   both (captured from standalone bridges), but messages for the second instance have not yet appeared in its counters. The diagnosis in
-   progress is recorded in [docs/014-progress.md](docs/014-progress.md).
+2. **Instances of one kind share one counter.** The second DingTalk instance does receive traffic (its log shows `receive="stored"`), but
+   its `received` counter stays at 0 while the mentions land on the instance that was addressed. Counters, like health entries, are per kind
+   rather than per instance.
 3. **A long-idle Stream connection is not re-established.** If DingTalk closes an idle connection without the client noticing, the bridge keeps
    running with a dead socket until the plugin restarts. A keepalive has not been implemented.
 4. **The pull-request poll reads a bare number.** `follows` stores numbers, so two repositories with the same pull-request number can be
