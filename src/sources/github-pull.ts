@@ -16,7 +16,7 @@ export type Pull = z.infer<typeof PullSchema> & { number: number }
 export const readPull = async (ctx: SourceContext, number: number, signal?: AbortSignal): Promise<Pull> =>
   ({ ...await ctx.commands.withSignal(signal).api(PullSchema, `pulls/${number}`), number })
 /** A Thread id names a repository only when it is not the default one: `github:5` or `github:owner/name#5`. */
-const pullRef = (thread: string): { repository?: string; number: number } | undefined => {
+export const pullRef = (thread: string): { repository?: string; number: number } | undefined => {
   if (!thread.startsWith(`${SOURCE}:`)) return undefined
   const rest = thread.slice(SOURCE.length + 1)
   const hash = rest.lastIndexOf('#')

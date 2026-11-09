@@ -9,7 +9,7 @@ import { branchCiTrigger, ciTrigger, commentTrigger, CommentSchema, githubAddres
   from './github-trigger.ts'
 import { githubLink, sendGithub } from './github-channel.ts'
 import type { GithubComment, PullRef } from './github-trigger.ts'
-import { observePull, pullRefsOf, pullsOf, readPull, type Pull } from './github-pull.ts'
+import { observePull, pullRef, pullRefsOf, pullsOf, readPull, type Pull } from './github-pull.ts'
 import { health, sourceContext, type Health, type SourceContext } from './host.ts'
 import { KV } from '../kv.ts'
 import { cursorAt, pause, POLL_HORIZON_MS, pollThreads as pollEach } from './poll.ts'
@@ -506,8 +506,9 @@ export async function pollThreads(ctx: SourceContext, signal?: AbortSignal, roun
 async function pollThread(ctx: SourceContext, round: Round, thread: Thread): Promise<void> {
   // The default branch's CI Thread has no Issue or PR to read; its CI arrives as Triggers.
   if (thread.ref.id.startsWith('ci:')) return
-  const number = Number(thread.ref.id)
-  if (!number) throw new Error('Subscribed thread has no GitHub issue or PR number')
+    // A Thread names a repository when it is not the default one, so the id is `owner/name#5` there; other Threads carry no PR.
+    const number = pullRef(thread.ref.id)?.number ?? Number(thread.ref.id)
+    if (!number) throw new Error('Subscribed thread has no GitHub issue or PR number')
   round.read.add(number)
   if (typeof thread.meta.isPr !== 'boolean' || typeof thread.meta.title !== 'string') {
     const issue = await ctx.commands.withSignal(round.signal).api(IssueSchema, `issues/${number}`)
