@@ -200,3 +200,11 @@ github-stream:…superagent-second:issues       since 14:36:02（第二仓）
 3. 断言：两者 `received` 各 1、判定里各一条 `im:probe-a` / `im:probe-b` 线程、无交叉
 4. 再在钉钉群分别 @ 两个机器人，验证真机
 5. 余下非阻塞项：健康条目按实例区分（危害已消除，纯展示）
+
+## 2026-11-09 夜：任意仓库 + 发布
+
+- 新增 `orchestrator_repo_add`、执行器按需克隆、`DSH_SUPERAGENT_REPOSITORY_DIR`
+- 修 `github.ts` 的线程 id 解析（`owner/name#5` 曾让 PR 轮询连续失败 253 次）
+- 全新仓库 `dsh-crew-demo` 端到端验证通过（克隆 → worktree → PR #2 已合并）
+- npm 发布链：`0.1.0` → `0.1.1` → `0.2.0` → `0.2.1` → `0.2.2`（`latest=0.2.2`）
+  注：npm registry 对新版本有数分钟索引延迟，期间 `npm view`/`install` 会 404，不是发布失败

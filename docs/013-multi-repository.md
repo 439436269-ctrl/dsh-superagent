@@ -344,3 +344,22 @@ channelAllowed(channel) {
 - 「各跑各的进程/凭据」✅ 已证
 - 「各自的群被承认」❌ **反证**（本轮探针实测失败）
 - 「两个机器人各收一条」仍缺人工触发（钉钉），但即使发了，只要两个实例监听不同群，就会撞上这个缺陷
+
+## 已支持：在未预先配置的仓库里干活（2026-11-09 深夜）
+
+两条通路补齐后，工单可以落在**监听列表之外**的仓库：
+
+1. `orchestrator_repo_add` —— 人明确要求时把 `owner/name` 加入 GitHub 源的 `repositories`
+2. **按需克隆** —— 工单的仓库目录不存在时，执行器用配置里的 `gh` 现场克隆：`executor.directory/<owner>/<name>`
+3. 新增环境变量 `DSH_SUPERAGENT_REPOSITORY_DIR`（克隆目录），`DSH_SUPERAGENT_DIR` 仍是 worktree
+
+实测（全新仓库 `439436269-ctrl/dsh-crew-demo`，从未手动克隆）：
+
+```
+issue #1 → accept → 工单 repository=dsh-crew-demo
+       → 自动克隆 E:/codes/superagent-sandbox/439436269-ctrl/dsh-crew-demo
+       → worktree fix-notes-typo-6214ad5d0ae2
+       → PR #2「Fix NOTES.md typo: Instalation -> Installation」已合并
+```
+
+同轮修掉：`github.ts` 里 PR 轮询仍用 `Number(thread.ref.id)`，遇到 `owner/name#5` 抛错导致连续 253 次轮询失败；改为 `pullRef(...)?.number ?? Number(...)`。
