@@ -391,3 +391,29 @@ issue #1 → accept → 工单 repository=dsh-crew-demo
 3. 测试改为断言"每个实例一组条目"
 
 这属于接口变更，需要连测试一起设计；两次尝试都证明不能顺手改。危害已经消除（停用实例不再写入共享槽），剩下的是可观测性问题。
+
+## 实测：同一应用的两个飞书实例，事件只派给其中一个（2026-11-10 07:2x）
+
+做法：用现有应用建第二个群「多源验证B」（`oc_b1268a83…`），`feishu` 只听旧群、`feishu-2` 只听新群（都是 `listen: all`），两个实例都 `ready`。
+
+用户分别在两个群发了「测试A」「测试B」。结果：
+
+| 消息 | 结果 |
+|---|---|
+| 测试A（旧群） | `feishu` 收到，判定 `ignore`，线程 `feishu:oc_bc091e…` ✅ |
+| 测试B（新群） | `feishu-2` **received=0，没有任何判定**；`feishu` 也没有它的记录 |
+
+**根因**：`lark-cli event consume` 是长连接消费者，飞书把一条事件派给**该应用下的某一个**消费者，不是广播。两个实例各起一个消费者，等于两个消费者抢同一批事件——新群那条被派给了 `feishu` 那个消费者，而它的群列表里没有新群，于是被丢弃，`feishu-2` 什么也看不到。
+
+**结论**：同一应用配两个实例无法做到「各管各群」。要验证目标 2 的飞书部分，必须有**第二个自建应用**，并让代码支持按实例用自己的应用身份。
+
+## 支持第二应用需要改的地方（尚未实现）
+
+现在飞书源是部署级单一 bot：
+
+1. `Deployment.feishu` 只解析出一个 bot（cli 路径 + appId + botId），`bot(ctx)` 用它取事件消费与 @ 判定
+2. `commands.lark()` 用进程级 `LARKSUITE_CLI_CONFIG_DIR`
+3. `consume()` spawn 时环境是 `{...process.env, ...agentEnvironment()}`，没有按实例叠加
+4. 回话 `sendFeishu` 也用同一个身份
+
+需要的改动：`FeishuConfig` 加 `env`（像 `im` 那样），`bot(ctx)` 按实例解析，spawn 与 `commands.lark` 接受该实例的 env，channel 地址带上实例以便回话用对身份。
