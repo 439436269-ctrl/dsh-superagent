@@ -2,6 +2,7 @@
 import type { Context } from '@deepseek-ai/cordis'
 import type { SessionId } from '@deepseek-ai/dsh-session'
 import type { Agent } from '@deepseek-ai/dsh-agent'
+import { existsSync } from 'node:fs'
 import { mkdir, rmdir, stat } from 'node:fs/promises'
 import { dirname, join } from 'node:path'
 import { key, latestAssignment, latestReport, liveTicket, runningAssignment, threadKey, waitsForPerson } from '../core/index.ts'
@@ -251,8 +252,31 @@ export class DshExecutor implements Executor {
    * A failed prepare command throws `PrepareFailed`, which is not retried automatically; an empty directory it left is removed, a non-empty one kept.
    * @throws PrepareFailed with the command's output when the prepare command fails.
    */
+  /**
+   * Clones the ticket's repository beside its worktree when no local clone exists yet, so a ticket can work in a repository this
+   * deployment does not watch. The clone sits in the directory the prepare command runs in; an existing clone is left alone.
+   */
+  private async ensureRepository(ticket: Ticket): Promise<void> {
+    const repository = ticket.repository
+    const directory = ticket.execution?.directory
+    if (!repository || !directory) return
+    const target = dirname(directory)
+    if (existsSync(join(target, '.git'))) return
+    const settings = this.host.store.settings()
+    const cli = ((settings.sources.github?.config as { cli?: string } | undefined)?.cli ?? '').trim() || 'gh'
+    const env = Object.fromEntries(this.host.environment(ticket).map(variable => [variable.key, variable.value]))
+    const signal = AbortSignal.any([this.host.lifetime, AbortSignal.timeout(PREPARE_TIMEOUT_MS)])
+    await mkdir(dirname(target), { recursive: true })
+    await runAsWorker(this.host.context.subprocess, [cli, 'repo', 'clone', repository, target], dirname(target), signal, env)
+      .catch((error: unknown) => {
+        throw new PrepareFailed(`Cloning ${repository} failed: ${error instanceof Error ? error.message : String(error)}`)
+      })
+  }
+
   private async prepareDirectory(ticket: Ticket): Promise<void> {
     const directory = ticket.execution?.directory ?? ''
+    // A ticket may work in a repository this deployment does not watch; clone it beside the worktree first.
+    await this.ensureRepository(ticket)
     await mkdir(dirname(directory), { recursive: true })
     const command = this.host.store.settings().executor.prepare.trim()
     const env = Object.fromEntries(this.host.environment(ticket).map(variable => [variable.key, variable.value]))
