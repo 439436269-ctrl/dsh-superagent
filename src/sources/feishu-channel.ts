@@ -20,7 +20,10 @@ export async function sendFeishu(host: Pick<SourceContext, 'commands'>, message:
   const messageId = message.channel.address.messageId
   if (!messageId) throw new Error('Missing Feishu reply target')
   const text = checkedImText(message.text)
-  const reply = ['im', '+messages-reply', '--message-id', messageId, '--markdown', text, '--reply-in-thread', '--idempotency-key', message.id]
+  // Reply as the instance that received the message, so two Feishu apps never answer for each other.
+  const profile = message.channel.address.larkProfile
+  const reply = ['im', '+messages-reply', '--message-id', messageId, '--markdown', text, '--reply-in-thread', '--idempotency-key', message.id,
+    ...profile ? ['--profile', profile] : []]
   try { await host.commands.lark(reply) }
   catch (error) {
     if (gone(error)) return 'gone'
