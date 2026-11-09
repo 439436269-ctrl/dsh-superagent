@@ -13,7 +13,7 @@ import { prepareShell, runAsWorker, verifyDirectory } from '../infra/environment
 import type { Settings } from '../policy.ts'
 import type { Store } from '../app/store.ts'
 import { Later, type Effects } from '../app/effects.ts'
-import { executionRoot, type Variable } from '../app/execution-environment.ts'
+import { executionRoot, repositoryDirectory, type Variable } from '../app/execution-environment.ts'
 import type { Sessions } from '../app/sessions.ts'
 import { WorktreeNameSchema } from '../app/assessment.ts'
 import { resultRelay } from '../app/notices.ts'
@@ -111,8 +111,9 @@ export function ticketExecution(ticket: Ticket, outcome: Extract<AssessmentOutco
   // A ticket working in a repository other than the default gets its own subtree, so two repositories never share a
   // worktree root; with a single repository nothing changes.
   const root = executionRoot(settings, stateDir)
-  const home = ticket.repository && ticket.repository !== defaultRepository ? join(root, ...ticket.repository.split('/')) : root
-  return { name, directory: join(home, name), assignment }
+  // Every ticket's worktree sits in the repository's own `worktrees` folder, so a repository adds one folder, not one per ticket.
+  const home = repositoryDirectory(settings, stateDir, ticket.repository ?? defaultRepository)
+  return { name, directory: join(home, 'worktrees', name), assignment }
 }
 /** Character limits for inline assignment and trigger text in worker messages; longer text is read via its resource. */
 const ASSIGNMENT_CHARS = 1500, TRIGGER_CHARS = 600
@@ -260,7 +261,7 @@ export class DshExecutor implements Executor {
     const repository = ticket.repository
     const directory = ticket.execution?.directory
     if (!repository || !directory) return
-    const target = dirname(directory)
+    const target = repositoryDirectory(this.host.store.settings(), this.host.machine.stateDir, repository)
     if (existsSync(join(target, '.git'))) return
     const settings = this.host.store.settings()
     const cli = ((settings.sources.github?.config as { cli?: string } | undefined)?.cli ?? '').trim() || 'gh'
@@ -277,12 +278,13 @@ export class DshExecutor implements Executor {
     const directory = ticket.execution?.directory ?? ''
     // A ticket may work in a repository this deployment does not watch; clone it beside the worktree first.
     await this.ensureRepository(ticket)
-    await mkdir(dirname(directory), { recursive: true })
+    const home = repositoryDirectory(this.host.store.settings(), this.host.machine.stateDir, ticket.repository)
+    await mkdir(home, { recursive: true })
     const command = this.host.store.settings().executor.prepare.trim()
     const env = Object.fromEntries(this.host.environment(ticket).map(variable => [variable.key, variable.value]))
     // Enforce a timeout so a hung prepare command (such as on a credential prompt) fails the ticket instead of holding a worker slot indefinitely.
     const signal = AbortSignal.any([this.host.lifetime, AbortSignal.timeout(PREPARE_TIMEOUT_MS)])
-    if (command) await runAsWorker(this.host.context.subprocess, [...prepareShell(), command], dirname(directory), signal, env)
+    if (command) await runAsWorker(this.host.context.subprocess, [...prepareShell(), command], home, signal, env)
       .catch(async (error: unknown) => {
         // Remove an empty directory left by a failed prepare command so a later retry does not treat it as already prepared.
         await rmdir(directory).catch(() => { /* Absent, or holding what the command wrote, which the output explains. */ })

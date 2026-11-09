@@ -70,7 +70,9 @@ async function watch(ctx: SourceContext, signal: AbortSignal): Promise<void> {
 export const consumerRetry = (previous: number | undefined, ranMs: number): number =>
   previous === undefined || ranMs >= 60_000 ? 1000 : Math.min(previous * 2, 60_000)
 async function consume(ctx: SourceContext, signal: AbortSignal): Promise<void> {
-  const child = spawn(bot(ctx).cli, ['event', 'consume', 'im.message.receive_v1', '--as', 'bot'],
+  const profile = enabled(ctx)?.app?.trim()
+  const args = ['event', 'consume', 'im.message.receive_v1', '--as', 'bot', ...profile ? ['--profile', profile] : []]
+  const child = spawn(bot(ctx).cli, args,
     { stdio: ['pipe', 'pipe', 'pipe'], env: { ...process.env, ...agentEnvironment(), LARKSUITE_CLI_NO_UPDATE_NOTIFIER: '1',
       LARKSUITE_CLI_NO_SKILLS_NOTIFIER: '1' } })
   const stdout = createInterface({ input: child.stdout }); const stderr = createInterface({ input: child.stderr })
@@ -88,7 +90,7 @@ async function consume(ctx: SourceContext, signal: AbortSignal): Promise<void> {
   stdout.on('line', (line: string) => {
     chain = chain.then(async () => {
       if (line.length > 1_048_576) throw new Error('Feishu event exceeds 1 MiB')
-      const trigger = feishuTrigger(JSON.parse(line), bot(ctx).botId, bot(ctx).appId)
+      const trigger = feishuTrigger(JSON.parse(line), bot(ctx).botId, bot(ctx).appId, enabled(ctx)?.app?.trim())
       // Events already read when the Source is disabled are dropped; the consumer stops shortly after.
       if (!trigger || !enabled(ctx)) return
       const chats = ctx.state.get(KV.feishu.chats) ?? {}
@@ -186,7 +188,7 @@ export async function backfillChat(ctx: SourceContext, chatId: string, direct: b
         if (message.deleted) continue
         const at = feishuTime(message.create_time)
         if (message.thread_id && !(Date.parse(topics[message.thread_id] ?? '') >= Date.parse(at))) topics[message.thread_id] = at
-        const trigger = feishuTrigger(historyEvent(message, chatId, direct), bot(ctx).botId, bot(ctx).appId)
+        const trigger = feishuTrigger(historyEvent(message, chatId, direct), bot(ctx).botId, bot(ctx).appId, enabled(ctx)?.app?.trim())
         if (trigger) await receive(ctx, trigger)
       }
       const stuck = result.has_more && (!result.page_token || pages.has(result.page_token))
@@ -255,7 +257,7 @@ async function pollThread(ctx: SourceContext, thread: Thread, signal?: AbortSign
     const { botId, appId } = bot(ctx)
     for (const message of result.messages.filter(item => !known.has(item.message_id) && !item.deleted).reverse()) {
       if (signal?.aborted) return
-      const trigger = feishuTrigger(topicEvent(message, ref.chatId, direct, root), botId, appId)
+      const trigger = feishuTrigger(topicEvent(message, ref.chatId, direct, root), botId, appId, enabled(ctx)?.app?.trim())
       // Ignore messages older than the thread subscription on initial poll.
       if (!trigger || (!initialized && Date.parse(trigger.at) < since)) continue
       await receive(ctx, trigger)

@@ -18,6 +18,16 @@ export interface Variable { key: string; value: string; description: Localized; 
 
 export const executionRoot = (settings: Settings, stateDir: string): string => settings.executor.directory || join(stateDir, 'work')
 
+/**
+ * Where a repository is cloned: the execution root for the deployment's own repository, and an owner/name subtree for any other.
+ * Worktrees live in a `worktrees` folder inside it, so the root keeps one folder per repository instead of one per ticket.
+ */
+export const repositoryDirectory = (settings: Settings, stateDir: string, repository?: string): string => {
+  const root = executionRoot(settings, stateDir)
+  const own = (settings.sources.github?.config as { repository?: string } | undefined)?.repository
+  return !repository || repository === own ? root : join(root, ...repository.split('/'))
+}
+
 /** Lists all declared variables grouped by owner; `enabled` is false for Sources that are currently switched off. */
 export function declaredVariables(sources: SourceRegistry, settings?: Settings): { owner: string; enabled: boolean; variables: readonly VariableSpec[] }[] {
   const on = new Set(sources.environments(settings).map(item => item.kind.kind))
@@ -25,9 +35,9 @@ export function declaredVariables(sources: SourceRegistry, settings?: Settings):
     ...sources.declarations().map(({ kind, variables }) => ({ owner: kind, enabled: on.has(kind), variables }))]
 }
 
-export function environmentOf(input: { deployment: Deployment; sources: SourceRegistry; settings: Settings; ticket?: { id: string; name: string; directory: string }; trigger?: Trigger }): Variable[] {
-  const { deployment, sources, settings, ticket, trigger } = input
-  const executor: Record<string, string> = { DSH_SUPERAGENT_BLOCKED_COMMANDS: settings.executor.blockedCommands.join(' '), ...ticket ? { DSH_SUPERAGENT_DIR: ticket.directory, DSH_SUPERAGENT_REPOSITORY_DIR: dirname(ticket.directory), DSH_SUPERAGENT_NAME: ticket.name, DSH_SUPERAGENT_TICKET: ticket.id } : {} }
+export function environmentOf(input: { deployment: Deployment; sources: SourceRegistry; settings: Settings; stateDir: string; ticket?: { id: string; name: string; directory: string; repository?: string }; trigger?: Trigger }): Variable[] {
+  const { deployment, sources, settings, stateDir, ticket, trigger } = input
+  const executor: Record<string, string> = { DSH_SUPERAGENT_BLOCKED_COMMANDS: settings.executor.blockedCommands.join(' '), ...ticket ? { DSH_SUPERAGENT_DIR: ticket.directory, DSH_SUPERAGENT_REPOSITORY_DIR: repositoryDirectory(settings, stateDir, ticket.repository), DSH_SUPERAGENT_NAME: ticket.name, DSH_SUPERAGENT_TICKET: ticket.id } : {} }
   const result: Variable[] = EXECUTOR_VARIABLES.filter(spec => !spec.ticket || ticket).map(spec => ({ key: spec.key, value: executor[spec.key] ?? '', description: spec.description, owner: 'executor' }))
   for (const { kind, environment, config } of sources.environments(settings)) {
     const values = environment.values({ deployment, config, ...trigger ? { trigger } : {} })
@@ -37,9 +47,9 @@ export function environmentOf(input: { deployment: Deployment; sources: SourceRe
 }
 
 /** Combines a ticket's fixed directory, name, and origin trigger with the deployment's current settings. */
-export function ticketEnvironment(input: { deployment: Deployment; sources: SourceRegistry; settings: Settings; ticket: Ticket; trigger?: Trigger }) {
+export function ticketEnvironment(input: { deployment: Deployment; sources: SourceRegistry; settings: Settings; stateDir: string; ticket: Ticket; trigger?: Trigger }) {
   const { ticket, trigger, ...rest } = input
-  const values = { id: ticket.id, name: ticket.execution?.name ?? '', directory: ticket.execution?.directory ?? '' }
+  const values = { id: ticket.id, name: ticket.execution?.name ?? '', directory: ticket.execution?.directory ?? '', ...ticket.repository ? { repository: ticket.repository } : {} }
   return environmentOf({ ...rest, ticket: values, ...trigger ? { trigger } : {} })
 }
 export function environmentLines(variables: Variable[]): string {
