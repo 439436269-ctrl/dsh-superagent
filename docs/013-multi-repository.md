@@ -417,3 +417,32 @@ issue #1 → accept → 工单 repository=dsh-crew-demo
 4. 回话 `sendFeishu` 也用同一个身份
 
 需要的改动：`FeishuConfig` 加 `env`（像 `im` 那样），`bot(ctx)` 按实例解析，spawn 与 `commands.lark` 接受该实例的 env，channel 地址带上实例以便回话用对身份。
+
+## 派活到「非监听仓」需要什么（2026-11-10 探查结论，未实现）
+
+目标：在飞书里说「去改 owner/repo 的某个东西」，不建 issue 也能开工。
+
+现状：建票路径是 **Trigger → Eval（评估）→ Decision → Ticket**，缺一不可。
+
+```ts
+// src/core/engine.ts
+decide(triggerId: string, outcome: Outcome): Decision   // 需要已存在的 Trigger
+attach(ticketId: string, triggerId: string, note?): Ticket
+```
+
+`Outcome` 的 accept 分支由 **评估**（`evals.ts` 的 `accept()`）产生，带着 `Mandate`（strength / policyVersion / basis / actor / scope）：
+
+```ts
+private accept(thread, evaluation, outcome: Extract<AssessmentOutcome, { kind: 'accept' }>): Decision
+  const mandate: Mandate = { strength, policyVersion, basis, actor, scope: outcome.scope }
+  this.tickets.create(ticketId, decision.id, mandate, evaluation, outcome, at)
+```
+
+所以 `orchestrator_dispatch` **不是「造一条触发 + 调 decide」这么简单**，它要么：
+
+1. 造 Trigger + 跑一次真实评估（走现有 assessor，成本是「要先想清楚要做什么」），或
+2. 在 `Engine` 上新增 `dispatch(repository, request)` 入口：合成 Trigger 与一个 `strength: 'explicit'`、`basis.via: 'dispatched'` 的 Eval，直接产出 accept 的 Mandate
+
+方案 2 才是「一句话开工」，且不绕过策略（mandate 仍记录来源与强度）。
+
+已具备的部分：`Ticket.repository`、按需克隆、`worktrees` 目录、PR 与回复按仓——**执行侧全通**，只差这个入口。
