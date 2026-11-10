@@ -471,3 +471,17 @@ github:439436269-ctrl/superagent-second#17: gh: Not Found (HTTP 404)
 - 线程 id 两种形态已统一（`threadNumber()`），`github` 恢复 `ready`
 - 孤儿订阅线程 `github:439436269-ctrl/superagent-second#17`（指向不存在的 PR）用 `POST threads/:key/unsubscribe` 清掉
 - 第二个飞书机器人进群：`POST /im/v1/chats/:chat/members` 用 **`member_id_type: "app_id"`**（值填 `cli_xxx`）可以由群内机器人把另一个应用拉进群——跨应用的 open_id 不通用（`99992361`），但 app_id 可以
+
+## 派活入口的最终形态（2026-11-11 凌晨）
+
+| 想做的事 | 怎么用 |
+|---|---|
+| 监听仓里干活 | 那边开 issue / 提 PR，轮询驱动 |
+| 非监听仓里干活 | `orchestrator_dispatch(repository, request)` |
+| **还没有仓库** | `orchestrator_dispatch(request)` —— 工单落在 `<root>/local/<name>`，推送时再选仓库 |
+| 新建仓库 | `orchestrator_repo_create(name)` —— 裸名字建在部署仓库的 owner（这里是 `439436269-ctrl`）下 |
+
+两处必修的坑：
+
+1. **准入**：合成触发的 actor 是 `dispatched/person`，不在任何来源名单里，会被 `policy.gate` 判 `not_a_member`。现在 `meta.dispatched === 'true'` 的触发直接视为「操作者在主会话说的话」，跳过来源名单（外部来源的准入规则一字未动）。
+2. **无仓库工单的目录**：`repositoryDirectory()` 在仓库缺省会回落到部署仓库，那会让本地工单跑进部署仓库里。现在 `ticket.repository` 为空且存在默认仓库时，目录是 `<root>/local/<name>`。
