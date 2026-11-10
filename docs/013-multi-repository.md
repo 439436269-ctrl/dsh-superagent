@@ -446,3 +446,22 @@ private accept(thread, evaluation, outcome: Extract<AssessmentOutcome, { kind: '
 方案 2 才是「一句话开工」，且不绕过策略（mandate 仍记录来源与强度）。
 
 已具备的部分：`Ticket.repository`、按需克隆、`worktrees` 目录、PR 与回复按仓——**执行侧全通**，只差这个入口。
+
+## 线程 id 的两种形态（2026-11-10 修）
+
+`github.ts` 的 PR 轮询一直报 `Subscribed thread has no GitHub issue or PR number`，原因是我先前的修复只覆盖了一半：
+
+| 位置 | 形态 |
+|---|---|
+| Thread 的 `ref.id`（多仓） | `owner/name#17` —— **不带** `github:` 前缀 |
+| Thread 键 / channel 的 thread | `github:owner/name#17` —— 带前缀 |
+
+`pullRef()` 要求前缀，所以前者返回 `undefined`，回落到 `Number()` 得 `NaN` 就抛错。现在有一个 `threadNumber()` 两种形态都认，三处读编号的地方统一用它。
+
+修完后 `github` 只剩一条失败：
+
+```
+github:439436269-ctrl/superagent-second#17: gh: Not Found (HTTP 404)
+```
+
+**这是数据问题不是代码问题**：该 PR 在仓库里不存在（`gh api .../pulls/17` 返回 404）。来源是早先测试时留下的订阅线程。代码里 404 **故意重试**而不是当作已删除，理由写在注释里：404 也可能表示「对私有仓的访问被撤销」，贸然丢弃会漏掉真实工作。所以这条会一直让 `github` 处于 error，需要清掉那条订阅线程（探索面板/接口，或重建 dev 状态库）。
