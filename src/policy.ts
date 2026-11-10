@@ -194,6 +194,8 @@ export function settingsPolicy(settings: Settings, sources: SourceScope): Policy
     version, paused: settings.paused, evalTimeoutMs: settings.eval.timeoutSeconds * 1000,
     gate(trigger: Trigger, thread, tickets) {
       if (!trigger.human) return machineGate(trigger)
+      // A dispatch is the operator speaking through the main Session, not a message from a Source, so no allow-list applies.
+      if (trigger.meta.dispatched === 'true') return { admissible: true, strength: 'explicit', basis: { source: trigger.source, scope: trigger.meta, via: 'addressed', addressed: 'direct' } }
       const allowed = allowedSender(settings, trigger.actor)
       const scope = listened(sources, trigger.source, trigger.meta)
       const row = scope.listened ? scope.row : undefined
