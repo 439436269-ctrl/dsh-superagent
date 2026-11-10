@@ -697,6 +697,7 @@ const TEXT = {
   // User and agent error codes; English reuses the host's own text read by agents
   'userError.unknownTicket': ['找不到这个工单。', USER_ERRORS.unknownTicket[1]],
   'userError.unknownProblem': ['找不到这个未完成的评估。', USER_ERRORS.unknownProblem[1]],
+  'userError.repoCreateRefused': ['GitHub 拒绝创建 {repository}：{reason}', 'GitHub refused to create {repository}: {reason}'],
   'userError.unknownTrigger': ['找不到这个触发。', USER_ERRORS.unknownTrigger[1]],
   'userError.unknownAssignment': ['找不到这个派工。', USER_ERRORS.unknownAssignment[1]],
   'userError.unknownBlock': ['没有这个设置块：{block}', USER_ERRORS.unknownBlock[1]],
