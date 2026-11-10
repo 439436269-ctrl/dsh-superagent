@@ -112,7 +112,10 @@ export function ticketExecution(ticket: Ticket, outcome: Extract<AssessmentOutco
   // worktree root; with a single repository nothing changes.
   const root = executionRoot(settings, stateDir)
   // Every ticket's worktree sits in the repository's own `worktrees` folder, so a repository adds one folder, not one per ticket.
-  const home = repositoryDirectory(settings, stateDir, ticket.repository ?? defaultRepository)
+  // A ticket with no repository works locally first and gets one when its work is pushed.
+  const home = ticket.repository || !defaultRepository
+    ? repositoryDirectory(settings, stateDir, ticket.repository ?? defaultRepository)
+    : join(executionRoot(settings, stateDir), 'local')
   return { name, directory: join(home, 'worktrees', name), assignment }
 }
 /** Character limits for inline assignment and trigger text in worker messages; longer text is read via its resource. */

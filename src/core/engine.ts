@@ -50,14 +50,15 @@ export class Engine {
    * A person's request to work in a repository, without waiting for an event there: it becomes a Trigger on a Thread of its
    * own, so the ordinary assessment decides it — a request too vague for the Policy can still be refused.
    */
-  dispatch(input: { repository: string; request: string; actor?: string }): ReceiveResult {
+  dispatch(input: { repository?: string; request: string; actor?: string }): ReceiveResult {
     const at = new Date().toISOString()
-    const id = `dispatched:${input.repository}/${at}`
+    const scope = input.repository ?? 'local'
+    const id = `dispatched:${scope}/${at}`
     return this.receive({
-      id, source: 'dispatched', threads: [{ source: 'dispatched', id: input.repository }],
+      id, source: 'dispatched', threads: [{ source: 'dispatched', id: scope }],
       actor: { source: 'dispatched', id: input.actor ?? 'person' }, human: true, addressed: 'direct', at,
       text: input.request,
-      meta: { repository: input.repository, dispatched: 'true' },
+      meta: { ...input.repository ? { repository: input.repository } : {}, dispatched: 'true' },
     })
   }
   /**
