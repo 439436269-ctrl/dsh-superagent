@@ -498,16 +498,20 @@ export async function pollThreads(ctx: SourceContext, signal?: AbortSignal, roun
     try { await pollThread(ctx, round, thread) }
     catch (error) {
       if (stopped(ctx, round)) throw error
-      if (deleted(error)) round.dropped.push(Number(thread.ref.id)); else round.failures.push(`${thread.key}: ${String(error)}`)
+      if (deleted(error)) round.dropped.push(threadNumber(thread.ref.id) ?? 0); else round.failures.push(`${thread.key}: ${String(error)}`)
       throw error
     }
-  }, thread => round.read.has(Number(thread.ref.id)))
+  }, thread => round.read.has(threadNumber(thread.ref.id) ?? -1))
 }
+/** The pull request an id names, whether it carries the `github:` prefix (Thread keys do) or not (a Thread's own ref.id). */
+const threadNumber = (id: string): number | undefined =>
+  pullRef(id)?.number ?? pullRef(`${SOURCE}:${id}`)?.number ?? (Number.isFinite(Number(id)) ? Number(id) : undefined)
+
 async function pollThread(ctx: SourceContext, round: Round, thread: Thread): Promise<void> {
   // The default branch's CI Thread has no Issue or PR to read; its CI arrives as Triggers.
   if (thread.ref.id.startsWith('ci:')) return
     // A Thread names a repository when it is not the default one, so the id is `owner/name#5` there; other Threads carry no PR.
-    const number = pullRef(thread.ref.id)?.number ?? Number(thread.ref.id)
+    const number = threadNumber(thread.ref.id)
     if (!number) throw new Error('Subscribed thread has no GitHub issue or PR number')
   round.read.add(number)
   if (typeof thread.meta.isPr !== 'boolean' || typeof thread.meta.title !== 'string') {
