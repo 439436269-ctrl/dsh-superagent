@@ -465,3 +465,9 @@ github:439436269-ctrl/superagent-second#17: gh: Not Found (HTTP 404)
 ```
 
 **这是数据问题不是代码问题**：该 PR 在仓库里不存在（`gh api .../pulls/17` 返回 404）。来源是早先测试时留下的订阅线程。代码里 404 **故意重试**而不是当作已删除，理由写在注释里：404 也可能表示「对私有仓的访问被撤销」，贸然丢弃会漏掉真实工作。所以这条会一直让 `github` 处于 error，需要清掉那条订阅线程（探索面板/接口，或重建 dev 状态库）。
+
+## 收尾记录（2026-11-10 夜）
+
+- 线程 id 两种形态已统一（`threadNumber()`），`github` 恢复 `ready`
+- 孤儿订阅线程 `github:439436269-ctrl/superagent-second#17`（指向不存在的 PR）用 `POST threads/:key/unsubscribe` 清掉
+- 第二个飞书机器人进群：`POST /im/v1/chats/:chat/members` 用 **`member_id_type: "app_id"`**（值填 `cli_xxx`）可以由群内机器人把另一个应用拉进群——跨应用的 open_id 不通用（`99992361`），但 app_id 可以
