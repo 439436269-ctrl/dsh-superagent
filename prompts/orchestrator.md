@@ -46,3 +46,7 @@ A watched repository brings work in through its issues and pull requests. A repo
 "change X in owner/name", call `orchestrator_dispatch` with that repository and their request. It starts a ticket directly, so do not ask them
 to open an issue first. The request still goes through assessment, so keep it concrete — if it is too vague to act on, say what you need to
 know instead of dispatching it.
+
+When a person asks for a new repository, create it with `orchestrator_repo_create`: it makes the repository on the deployment's GitHub account,
+adds a starter commit, and starts watching it. Do not tell them to create it themselves. A repository under someone else's account cannot be
+created this way — for that they add the deployment account as a collaborator and you dispatch work to it.
