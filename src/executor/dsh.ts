@@ -112,10 +112,7 @@ export function ticketExecution(ticket: Ticket, outcome: Extract<AssessmentOutco
   // worktree root; with a single repository nothing changes.
   const root = executionRoot(settings, stateDir)
   // Every ticket's worktree sits in the repository's own `worktrees` folder, so a repository adds one folder, not one per ticket.
-  // A ticket with no repository works locally first and gets one when its work is pushed.
-  const home = ticket.repository || !defaultRepository
-    ? repositoryDirectory(settings, stateDir, ticket.repository ?? defaultRepository)
-    : join(executionRoot(settings, stateDir), 'local')
+  const home = repositoryDirectory(settings, stateDir, ticket.repository ?? defaultRepository)
   return { name, directory: join(home, 'worktrees', name), assignment }
 }
 /** Character limits for inline assignment and trigger text in worker messages; longer text is read via its resource. */
@@ -265,6 +262,8 @@ export class DshExecutor implements Executor {
     const directory = ticket.execution?.directory
     if (!repository || !directory) return
     const target = repositoryDirectory(this.host.store.settings(), this.host.machine.stateDir, repository)
+    // The deployment's own repository is the execution root itself, so there is nothing to clone for it.
+    if (target === executionRoot(this.host.store.settings(), this.host.machine.stateDir)) return
     if (existsSync(join(target, '.git'))) return
     const settings = this.host.store.settings()
     const cli = ((settings.sources.github?.config as { cli?: string } | undefined)?.cli ?? '').trim() || 'gh'
