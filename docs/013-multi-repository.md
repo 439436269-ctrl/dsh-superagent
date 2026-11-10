@@ -478,7 +478,7 @@ github:439436269-ctrl/superagent-second#17: gh: Not Found (HTTP 404)
 |---|---|
 | 监听仓里干活 | 那边开 issue / 提 PR，轮询驱动 |
 | 非监听仓里干活 | `orchestrator_dispatch(repository, request)` |
-| **还没有仓库** | `orchestrator_dispatch(request)` —— 工单落在 `<root>/local/<name>`，推送时再选仓库 |
+| **还没有仓库** | `orchestrator_dispatch(request)` —— 工单落在 `<root>/worktrees/<name>`（与默认仓库的工单同处一层），推送时再选仓库 |
 | 新建仓库 | `orchestrator_repo_create(name)` —— 裸名字建在部署仓库的 owner（这里是 `439436269-ctrl`）下 |
 
 两处必修的坑：
