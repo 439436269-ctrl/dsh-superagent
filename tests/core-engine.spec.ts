@@ -71,6 +71,19 @@ function accepted(h: ReturnType<typeof harness>, id = '1', thread = 't1') {
   return decision
 }
 
+describe('dispatch', () => {
+  it('takes a request for a named repository', () => {
+    const h = harness()
+    expect(h.engine.dispatch({ repository: 'acme/widgets', request: 'add a notes screen' })).toBe('stored')
+    // Each dispatch is its own request: repeating it is a second piece of work, not a replay of the first.
+    expect(h.engine.dispatch({ repository: 'acme/widgets', request: 'add a notes screen' })).toBe('stored')
+  })
+  it('takes a request with no repository at all', () => {
+    const h = harness()
+    expect(h.engine.dispatch({ request: 'sketch a notes app' })).toBe('stored')
+  })
+})
+
 describe('intake', () => {
   it('stores a trigger once and records source filtering', () => {
     const h = harness()
