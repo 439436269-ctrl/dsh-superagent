@@ -3,6 +3,7 @@ import { execFile } from 'node:child_process'
 import { basename } from 'node:path'
 import { promisify } from 'node:util'
 import { z } from 'zod'
+import { UserError } from '../core/errors.ts'
 import type { Deployment } from '../deployment.ts'
 
 const exec = promisify(execFile)
@@ -116,11 +117,17 @@ export class Commands {
     if (!result.ok) throw membership(new CliError(`${result.error?.message ?? 'Feishu command failed'}${code ? ` (${code})` : ''}`, code))
     return result.data
   }
-  /** Creates a GitHub repository under the deployment's account, with a starter commit, and returns its URL. */
-  async createRepository(name: string, options: { private: boolean; description?: string }): Promise<string> {
-    const args = ['repo', 'create', name, '--add-readme', options.private ? '--private' : '--public']
+  /**
+   * Creates a GitHub repository with a starter commit and returns its URL. Only the deployment's own GitHub account can create a repository
+   * under an owner it controls, so a permission failure is reported as the operator's decision rather than as a generic error.
+   */
+  async createRepository(slug: string, options: { private: boolean; description?: string }): Promise<string> {
+    const args = ['repo', 'create', slug, '--add-readme', options.private ? '--private' : '--public']
     if (options.description) args.push('--description', options.description)
-    return (await this.run(this.deployment.github.cli, args)).trim()
+    try { return (await this.run(this.deployment.github.cli, args)).trim() }
+    catch (error) {
+      throw new UserError('repoCreateRefused', { repository: slug, reason: error instanceof Error ? error.message.slice(0, 300) : String(error) })
+    }
   }
   /** Runs `git` on PATH using the agent's isolated git environment and credential helper. */
   async git(args: string[], cwd: string): Promise<string> { return this.run('git', args, cwd) }
