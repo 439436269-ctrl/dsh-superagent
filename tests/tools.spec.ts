@@ -9,6 +9,12 @@ import { CliError, Commands } from '../src/infra/commands.ts'
 import { IM_WORDS, NOTE_WORDS } from '../src/infra/text.ts'
 import { CHAT, feishu, startRuntime, type Host } from './fixtures/host.ts'
 
+it('creates a repository from a bare name under the deployment repository\'s owner and starts watching it', async () => {
+  const created = await h.runTool(h.runtime.masterId, 'orchestrator_repo_create', { name: 'notes', private: true })
+  expect(created).toMatchObject({ repository: 'acme/notes' })
+  expect((h.runtime.store.settings().sources.github?.config as { repositories?: string[] }).repositories).toContain('acme/notes')
+})
+
 let h: Host
 beforeEach(async () => { h = await startRuntime() })
 afterEach(async () => { await h.stop() })
