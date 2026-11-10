@@ -403,6 +403,7 @@ const TEXT = {
   pauseProcessing: ['暂停处理', 'Pause processing'],
   pauseProcessingConfirm: ['暂停后，来源继续记录触发，但不开始新的评估、不派工、不发送回复，直到恢复。', 'While paused, Sources keep recording Triggers, but no Evals or Assignments start and no replies are sent until processing resumes.'],
   processingPaused: ['处理已暂停', 'Processing paused'],
+  'ticketFilter.all': ['全部', 'All'],
   'ticketFilter.open': ['进行中', 'Open'],
   'ticketFilter.person': ['待处理', 'Pending'],
   'ticketFilter.working': ['执行中', 'Working'],
