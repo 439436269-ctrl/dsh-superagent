@@ -116,6 +116,12 @@ export class Commands {
     if (!result.ok) throw membership(new CliError(`${result.error?.message ?? 'Feishu command failed'}${code ? ` (${code})` : ''}`, code))
     return result.data
   }
+  /** Creates a GitHub repository under the deployment's account, with a starter commit, and returns its URL. */
+  async createRepository(name: string, options: { private: boolean; description?: string }): Promise<string> {
+    const args = ['repo', 'create', name, '--add-readme', options.private ? '--private' : '--public']
+    if (options.description) args.push('--description', options.description)
+    return (await this.run(this.deployment.github.cli, args)).trim()
+  }
   /** Runs `git` on PATH using the agent's isolated git environment and credential helper. */
   async git(args: string[], cwd: string): Promise<string> { return this.run('git', args, cwd) }
 }

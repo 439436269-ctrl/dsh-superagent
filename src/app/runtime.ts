@@ -236,7 +236,7 @@ export class Runtime extends Service implements SourceHost {
       this.sourceDeps = { store, engine, outbox, commands, sources, get ready() { return runtime.ready },
         get deployment() { return setup.deployment }, configured: () => setup.configured(),
         get setupProblem() { return setup.problem }, get feishuProblem() { return setup.feishuProblem }, receive: trigger => passes.receive(trigger) }
-      this.toolHost = { context: ctx, engine, store, prompts, sessions, settings: this.settings, assessor, resources,
+      this.toolHost = { context: ctx, engine, store, prompts, sessions, settings: this.settings, assessor, commands, resources,
         bus: new SessionBus({ stateDir: machine.stateDir, control: ctx.sessionController as unknown as DshSessionControl }),
         get github() { return runtime.context({ kind: 'github', health: ['github'] }) },
         dispatcher: async (text: string, signal: AbortSignal) => {
