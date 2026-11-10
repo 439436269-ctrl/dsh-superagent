@@ -485,3 +485,25 @@ github:439436269-ctrl/superagent-second#17: gh: Not Found (HTTP 404)
 
 1. **准入**：合成触发的 actor 是 `dispatched/person`，不在任何来源名单里，会被 `policy.gate` 判 `not_a_member`。现在 `meta.dispatched === 'true'` 的触发直接视为「操作者在主会话说的话」，跳过来源名单（外部来源的准入规则一字未动）。
 2. **无仓库工单的目录**：`repositoryDirectory()` 在仓库缺省会回落到部署仓库，那会让本地工单跑进部署仓库里。现在 `ticket.repository` 为空且存在默认仓库时，目录是 `<root>/local/<name>`。
+
+## 「加监听」曾被误判成「改账号」（2026-11-11 修）
+
+症状：飞书里让它加/建仓库，它回「被部署配置挡住了（得在管理面板改 Source）」——**不是模型编的**：
+
+```ts
+SETUP_FIELDS = { github: Object.keys(GithubAccountsSchema.shape) }   // = repository, repositories, cli
+guard: origin !== 'panel' && setupChanged(current, candidate) → throw panelOnlyAccounts
+```
+
+`repositories` 被算进「部署账号字段」，于是**任何工具路径的加监听保存都被拒**，`orchestrator_repo_add` / `orchestrator_repo_create` 全都用不了。
+
+修法：拆两个概念
+
+| 常量 | 内容 | 用途 |
+|---|---|---|
+| `SETUP_FIELDS` | 整份配置键 | 决定要不要重跑部署检查、是否重启 |
+| `ACCOUNT_FIELDS` | 只有 `cli` | 守卫：仅管理面板可改 |
+
+`setupChanged(before, after, fields)` 现在接受字段表；守卫传 `ACCOUNT_FIELDS`，重启判断仍用完整表。改目标仓库仍会重启，加监听不会。
+
+测试：`tools.spec` 由 1 failed 变 27 passed，新增一条「裸名字建仓并写入 repositories」。
