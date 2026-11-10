@@ -32,11 +32,12 @@ export function basisFacts(basis: MandateBasis, rule: Snapshot['rule']): { facts
   if (authority) facts.push({ name: 'legacyAuthority', value: authority })
   return { facts, legacy: authority !== undefined }
 }
-export function ticketList(host: ViewHost, stage: 'open' | TicketStage['stage'], offset: number, limit: number) {
+export function ticketList(host: ViewHost, stage: 'open' | 'all' | TicketStage['stage'], offset: number, limit: number) {
   const view = snapshot(host)
   const { store } = view
-  const shown = (ticket: Ticket) => stage === 'open' ? liveTicket(ticket) : ticketStage(ticket).stage === stage
-  const tickets = (stage === 'ended' ? store.tickets.list() : store.tickets.open()).filter(shown).sort(newestFirst)
+  // 'all' lists every ticket, which is what an operator means by "show me everything" rather than an empty open list.
+  const shown = (ticket: Ticket) => stage === 'open' ? liveTicket(ticket) : stage === 'all' ? true : ticketStage(ticket).stage === stage
+  const tickets = (stage === 'open' ? store.tickets.open() : store.tickets.list()).filter(shown).sort(newestFirst)
   const result = page(tickets, offset, limit)
   return { ...result, items: result.items.map(ticket => ticketRow(view, ticket)) }
 }
