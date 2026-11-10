@@ -208,3 +208,22 @@ github-stream:…superagent-second:issues       since 14:36:02（第二仓）
 - 全新仓库 `dsh-crew-demo` 端到端验证通过（克隆 → worktree → PR #2 已合并）
 - npm 发布链：`0.1.0` → `0.1.1` → `0.2.0` → `0.2.1` → `0.2.2`（`latest=0.2.2`）
   注：npm registry 对新版本有数分钟索引延迟，期间 `npm view`/`install` 会 404，不是发布失败
+
+## 2026-11-11 凌晨：派活入口与验收状态
+
+代码（全部已提交、`tsc` 0）：
+
+| 能力 | 入口 | 证据 |
+|---|---|---|
+| 监听仓干活 | issue/PR 轮询 | `dsh-crew-demo` 全链路，PR #2 已合并 |
+| 非监听仓派活 | `orchestrator_dispatch(repository, request)` | 单测证明准入通过（`dispatch-admission.spec.ts`） |
+| 无仓库先本地干 | `orchestrator_dispatch(request)` | 目录 `<root>/local/<name>`，未实测 |
+| 新建仓库 | `orchestrator_repo_create(name)` | 默认 owner `439436269-ctrl`，未实测 |
+
+未完成的实测（需要人操作，我这边没有入口）：
+
+1. 桌面客户端重启后在飞书上真正触发一次 dispatch —— 验证工单生成与本地/worktree 目录
+2. 「多源验证B」群里 `@多源助手` —— 验证两个飞书实例各管各群（同一应用双实例会互抢的结论已由文档记录，当前用两个应用规避）
+3. 企业微信多实例：无凭据，从未连过真实群
+
+已知限制与坑（详见 013）：`lark-cli` 的 strict 模式在多 app 配置下需要两个 app 都设 `strictMode: "bot"`；同一 app 两个消费者会静默丢事件，代码里已有防护并明确报错。
