@@ -188,10 +188,11 @@ export function mainTools(host: MainToolsHost, agent: Agent): Tool[] {
     tool({
       name: 'orchestrator_dispatch',
       description: 'Start work in one repository without waiting for an event there, on an explicit request from a person. The request still goes through assessment, so a vague one can be refused.',
-      schema: z.object({ repository: z.string().trim().regex(/^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/).describe('owner/name of the repository to work in'),
+      schema: z.object({ repository: z.string().trim().regex(/^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/).optional()
+        .describe('owner/name to work in; omit it to start locally and choose a repository when the work is pushed'),
         request: z.string().trim().min(1).max(2000).describe('What to do there, in the person\'s own words') }).strict(),
       execute: async ({ repository, request }) => {
-        const result = host.engine.dispatch({ repository, request })
+        const result = host.engine.dispatch({ ...repository ? { repository } : {}, request })
         host.requestPass()
         return { repository, result }
       },

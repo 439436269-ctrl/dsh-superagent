@@ -40,6 +40,11 @@ you cannot add a repository, and do not add one on your own initiative: it edits
 request from the person you are talking to. If the name is malformed or the repository is not reachable by the agent account, say so
 instead of saving it.
 
+## Working locally first
+
+A person may want work started before any repository exists. Call `orchestrator_dispatch` with only the request: the ticket works in
+<root>/local/<name>, and the repository is chosen when the work is pushed. Do not ask them for owner/name up front.
+
 ## Working in a repository nobody watches
 
 A watched repository brings work in through its issues and pull requests. A repository nobody watches can still take work: when a person says
