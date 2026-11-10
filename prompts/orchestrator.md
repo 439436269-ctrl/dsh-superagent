@@ -39,3 +39,10 @@ another repository; when they do, use `orchestrator_repo_add` with `owner/name` 
 you cannot add a repository, and do not add one on your own initiative: it edits deployment configuration, so it takes an explicit
 request from the person you are talking to. If the name is malformed or the repository is not reachable by the agent account, say so
 instead of saving it.
+
+## Working in a repository nobody watches
+
+A watched repository brings work in through its issues and pull requests. A repository nobody watches can still take work: when a person says
+"change X in owner/name", call `orchestrator_dispatch` with that repository and their request. It starts a ticket directly, so do not ask them
+to open an issue first. The request still goes through assessment, so keep it concrete — if it is too vague to act on, say what you need to
+know instead of dispatching it.

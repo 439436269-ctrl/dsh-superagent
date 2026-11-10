@@ -47,6 +47,20 @@ export class Engine {
    */
   receive(trigger: Trigger): ReceiveResult { return this.repo.atomic(() => this.intake.receive(trigger)) }
   /**
+   * A person's request to work in a repository, without waiting for an event there: it becomes a Trigger on a Thread of its
+   * own, so the ordinary assessment decides it — a request too vague for the Policy can still be refused.
+   */
+  dispatch(input: { repository: string; request: string; actor?: string }): ReceiveResult {
+    const at = new Date().toISOString()
+    const id = `dispatched:${input.repository}/${at}`
+    return this.receive({
+      id, source: 'dispatched', threads: [{ source: 'dispatched', id: input.repository }],
+      actor: { source: 'dispatched', id: input.actor ?? 'person' }, human: true, addressed: 'direct', at,
+      text: input.request,
+      meta: { repository: input.repository, dispatched: 'true' },
+    })
+  }
+  /**
    * A Source's request to make an open ticket follow one of its Threads, such as a pull request's, `own` when the ticket
    * opened it: the ticket subscribes to it, and a ready report ends it only once `followsDone` holds (see `Tickets.followsDone`).
    * @throws UserError when the ticket is unknown or has ended.
@@ -260,7 +274,7 @@ export class Engine {
 /** What Sources ask and tell the Engine. */
 export type EngineForSources = Pick<Engine, 'receive' | 'bindThread' | 'threadClosed'>
 /** What the main Session asks of the Engine. */
-export type EngineForMainSession = Pick<Engine, 'candidate' | 'candidateDelivered' | 'decide' | 'attach' | 'reply' | 'requestStatus' | 'note'>
+export type EngineForMainSession = Pick<Engine, 'dispatch' | 'candidate' | 'candidateDelivered' | 'decide' | 'attach' | 'reply' | 'requestStatus' | 'note'>
 /** What people ask of the Engine, through the panel or the main Session. */
 export type EngineForPeople = Pick<Engine, 'stopTicket' | 'retryTicket' | 'reevaluate' | 'unsubscribe' | 'dismiss'>
 /** What Settings tells the Engine. */
