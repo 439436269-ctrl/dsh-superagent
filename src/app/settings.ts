@@ -11,6 +11,7 @@ import { resolveRoleModel } from './role-models.ts'
 import { changedPaths, settingsNotice } from './notices.ts'
 import type { Sessions } from './sessions.ts'
 import { setupChanged, type Setup } from './setup.ts'
+import { ACCOUNT_FIELDS } from '../deployment.ts'
 import type { Store } from './store.ts'
 import { KV } from '../kv.ts'
 
@@ -53,7 +54,7 @@ const BLOCKS: Record<'policy' | 'eval' | 'executor' | 'source', Block> = {
     },
     merge: (settings, value, id) => ({ ...settings, sources: { ...settings.sources, [id]: value as SettingsValue['sources'][string] } }),
     // Only the management panel may switch source accounts.
-    guard: (current, candidate, origin) => { if (origin !== 'panel' && setupChanged(current, candidate)) throw new UserError('panelOnlyAccounts') },
+    guard: (current, candidate, origin) => { if (origin !== 'panel' && setupChanged(current, candidate, ACCOUNT_FIELDS)) throw new UserError('panelOnlyAccounts') },
   },
 }
 

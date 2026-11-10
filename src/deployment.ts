@@ -63,6 +63,11 @@ export const GithubAccountsSchema = z.object({
 export const FeishuBotSchema = z.object({ cli: z.string().trim().default('') })
 /** Source configuration keys that affect deployment setup and trigger a restart when changed. */
 export const SETUP_FIELDS: Readonly<Record<string, readonly string[]>> = { github: Object.keys(GithubAccountsSchema.shape), feishu: Object.keys(FeishuBotSchema.shape) }
+/**
+ * The setup fields that name an account CLI. Only these are panel-only: the watch list and the target repository are ordinary
+ * configuration a tool may change, so including them here would refuse every "watch this repository too".
+ */
+export const ACCOUNT_FIELDS: Readonly<Record<string, readonly string[]>> = { github: ['cli'], feishu: ['cli'] }
 
 export interface Deployment extends Machine {
   repository: string

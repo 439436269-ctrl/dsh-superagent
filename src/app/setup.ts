@@ -13,9 +13,10 @@ export interface SetupHost {
   restart(): void
 }
 
-const setupFields = (settings: Settings) =>
-  JSON.stringify(Object.entries(SETUP_FIELDS).map(([id, keys]) => keys.map(key => settings.sources[id]?.config[key] ?? '')))
-export const setupChanged = (before: Settings, after: Settings): boolean => setupFields(before) !== setupFields(after)
+const setupFields = (settings: Settings, fields: Readonly<Record<string, readonly string[]>>) =>
+  JSON.stringify(Object.entries(fields).map(([id, keys]) => keys.map(key => settings.sources[id]?.config[key] ?? '')))
+export const setupChanged = (before: Settings, after: Settings, fields: Readonly<Record<string, readonly string[]>> = SETUP_FIELDS): boolean =>
+  setupFields(before, fields) !== setupFields(after, fields)
 
 /**
  * Resolves the target repository, GitHub account, and optional Feishu bot by probing CLIs, then writes and applies the isolated git and shim environment used by worker processes.
