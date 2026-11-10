@@ -1,5 +1,4 @@
 import { describe, expect, it } from 'vitest'
-import type { SourceScope } from '../src/policy.ts'
 import { SettingsSchema, settingsPolicy } from '../src/policy.ts'
 import type { Trigger } from '../src/core/index.ts'
 
@@ -15,9 +14,9 @@ const dispatched = (dispatched = true): Trigger => ({
 describe('admission of a dispatched request', () => {
   it('admits it as explicit without asking any Source about its allow-list', () => {
     // A Source that would refuse anything: the dispatch must never reach it.
-    const sources = { scope: () => { throw new Error('the gate consulted a Source for a dispatch') } } as unknown as SourceScope
-    const policy = settingsPolicy(SettingsSchema.parse({}), sources)
-    const verdict = policy.gate(dispatched(), undefined, [])
+    const sources = { scope: () => { throw new Error('the gate consulted a Source for a dispatch') } }
+    const policy = settingsPolicy(SettingsSchema.parse({}), sources as never)
+    const verdict = policy.gate(dispatched(), undefined as never, [])
     expect(verdict).toMatchObject({ admissible: true, strength: 'explicit', basis: { addressed: 'direct', via: 'addressed' } })
   })
 })
