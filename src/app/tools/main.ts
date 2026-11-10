@@ -21,7 +21,7 @@ const RoutingNoteSchema = z.string().trim()
   .describe(`Optional routing background or explicit human constraint, at most ${NOTE_WORDS} words. Never add implementation instructions or replace the original source.`)
 export interface MainToolsHost {
   readonly context: Context
-  readonly engine: Pick<EngineForMainSession, 'decide' | 'attach' | 'reply' | 'requestStatus' | 'note'> & EngineForPeople
+  readonly engine: Pick<EngineForMainSession, 'dispatch' | 'decide' | 'attach' | 'reply' | 'requestStatus' | 'note'> & EngineForPeople
   readonly store: Pick<Store, 'tickets' | 'triggers' | 'threads' | 'atomic' | 'replyStatus' | 'settings'>
   readonly prompts: Pick<Prompts, 'preview' | 'save'>
   readonly sessions: Pick<Sessions, 'status' | 'notify' | 'delivery' | 'modelRetry'>
@@ -163,6 +163,17 @@ export function mainTools(host: MainToolsHost, agent: Agent): Tool[] {
     readTool('Read one page of a resource the resource parameter lists, such as the ticket list or a ticket. Follow next_offset, and next_resource where a page names one.',
       false, (resource, offset, limit, signal) => readResource(resources, resource, offset, limit, undefined, signal)),
     routeTool(host),
+    tool({
+      name: 'orchestrator_dispatch',
+      description: 'Start work in one repository without waiting for an event there, on an explicit request from a person. The request still goes through assessment, so a vague one can be refused.',
+      schema: z.object({ repository: z.string().trim().regex(/^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/).describe('owner/name of the repository to work in'),
+        request: z.string().trim().min(1).max(2000).describe('What to do there, in the person\'s own words') }).strict(),
+      execute: async ({ repository, request }) => {
+        const result = host.engine.dispatch({ repository, request })
+        host.requestPass()
+        return { repository, result }
+      },
+    }),
     tool({
       name: 'orchestrator_ticket_retry',
       description: 'Start a new assignment on an explicit human request to retry a ticket whose worker reported failed or blocked, or whose input was not delivered; the stalled one ends.',
