@@ -227,3 +227,22 @@ github-stream:…superagent-second:issues       since 14:36:02（第二仓）
 3. 企业微信多实例：无凭据，从未连过真实群
 
 已知限制与坑（详见 013）：`lark-cli` 的 strict 模式在多 app 配置下需要两个 app 都设 `strictMode: "bot"`；同一 app 两个消费者会静默丢事件，代码里已有防护并明确报错。
+
+## 2026-11-11 凌晨：验收现状（第 127 轮）
+
+已自证：
+
+- 面板仓库列表：`tickets?state=all` 返回 5 条，多仓工单带 `repository`（`dsh-crew-demo` / `superagent-second`），改造前的工单该字段为空——向后兼容
+- `state=all` 之前被 `.catch('open')` 静默降级成空列表，已修（`ddccf55`）
+- 钉钉两机器人：各收各的（`receive="stored"` ×2），探针各成独立线程
+- 桥的自检：`wecom.test.mjs` 5 项、`dingtalk.test.mjs` 6 项全过
+
+仍缺（需人操作）：
+
+1. 飞书两实例的**真实消息**验证。我试过三条自助路径都不行：
+   - 用户身份发消息：缺 `im:message:send` 用户授权（`99991679`），补授权要扫码
+   - bot 身份发消息：飞书只在被 @ 时推给 bot，且 bot 消息本身不会触发
+   - 用 `member_id_type=app_id` 把多源助手拉进群：成功，但进群 ≠ 能收到非 @ 消息
+   结论：必须在「多源验证B」群里由人 `@多源助手` 发一条
+2. 企业微信：无凭据，桥虽自检通过但从未连真实群
+3. 客户端实跑 dispatch / repo_create：需重启客户端后由人在飞书触发
