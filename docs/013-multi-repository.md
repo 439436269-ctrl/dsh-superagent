@@ -484,7 +484,7 @@ github:439436269-ctrl/superagent-second#17: gh: Not Found (HTTP 404)
 两处必修的坑：
 
 1. **准入**：合成触发的 actor 是 `dispatched/person`，不在任何来源名单里，会被 `policy.gate` 判 `not_a_member`。现在 `meta.dispatched === 'true'` 的触发直接视为「操作者在主会话说的话」，跳过来源名单（外部来源的准入规则一字未动）。
-2. **无仓库工单的目录**：`repositoryDirectory()` 在仓库缺省会回落到部署仓库，那会让本地工单跑进部署仓库里。现在 `ticket.repository` 为空且存在默认仓库时，目录是 `<root>/local/<name>`。
+2. **无仓库工单的目录**：曾经把它落到 `<root>/local/<name>`，但这与既有行为不一致，且部署根目录本身就是默认仓库；现在无仓库工单与默认仓库工单同处 `<root>/worktrees/<name>`。
 
 ## 「加监听」曾被误判成「改账号」（2026-11-11 修）
 
