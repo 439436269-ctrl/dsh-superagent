@@ -34,7 +34,9 @@ export function feishuTrigger(input: unknown, botId: string, botAppId: string, p
   const direct = event.chat_type === 'p2p'
   const mentioned = event.mentions.some(mention => mention.id === botId || mention.id === botAppId)
   const thread = feishuThreadId(event.chat_id, event.root_id, event.message_id)
-  return { id: feishuTriggerId(event.message_id), source: SOURCE, threads: [{ source: SOURCE, id: thread }],
+  // A shared consumer hands the same message to every instance, so the id names the instance that will judge it.
+  const id = feishuTriggerId(event.message_id)
+  return { id: instance && instance !== SOURCE ? `${id}#${instance}` : id, source: SOURCE, threads: [{ source: SOURCE, id: thread }],
     actor: { source: SOURCE, id: event.sender_id }, human: event.sender_type === 'user',
     ...(direct ? { addressed: 'direct' as const } : mentioned ? { addressed: 'mention' as const } : {}),
     at: feishuTime(event.create_time), text: withMentionNames(event.content, event.mentions),
