@@ -258,3 +258,29 @@ github-stream:…superagent-second:issues       since 14:36:02（第二仓）
 | 企业微信 | 按用户决定搁置；桥自检 5 项通过，从未连过真实群 |
 
 飞书这条的阻塞是结构性的，不是代码：开发实例 3082 重启后不会自启，而飞书事件**不补发**，所以消息到达时必须有人在跑。三条自助路径已试尽（用户身份缺 `im:message:send` 授权、bot 消息不触发另一个 bot、拉进群不等于能收非 @ 消息）。需要用户在群里 `@多源助手` 或直接私聊多源助手发一句话。
+
+## 2026-11-11 上午：飞书第二实例的事件投递仍未打通（证据链）
+
+排查过程与判据：
+
+| 检查 | 结果 |
+|---|---|
+| 多源助手在「多源验证B」群 | ✅ 用它自己的 `GET /im/v1/chats` 能列出该群 |
+| 能读群消息 | ✅ `GET /im/v1/messages?container_id_type=chat` 读到了含 @ 的记录 |
+| @ 的目标 | ✅ mention `open_id = ou_4d2e5f82…`（多源助手本人），sender 为 user |
+| 权限 | ✅ `im:message.group_at_msg:readonly`、`im:message.group_msg` 均「已开通」 |
+| 事件订阅 | ✅ `im.message.receive_v1`，订阅方式「使用长连接」 |
+| 版本 | ✅ 1.0.1 已发布 |
+| 消费者 | ✅ 独立探测消费者 `[event] ready`，`consuming as duoyuan` |
+| **事件送达** | ❌ 探测期间 0 条；`feishu-2.received` 始终 0 |
+
+同时本机网络在该时段不稳定：
+
+```
+bus.log: get conn url failed: Post https://open.feishu.cn/callback/ws/endpoint: EOF
+         lookup open.feishu.cn: no such host
+```
+
+同一群的另一条消息被**团队助手**（默认应用）收到（`feishu.received` 从 10 涨到 14），说明群与消息本身正常，差异在第二个应用的事件投递。
+
+尚未验证完的一条假设：该应用可能需要在「应用能力 → 机器人」里显式开启消息接收，或事件订阅需要随版本重新生效（1.0.1 的「权限变更」显示「暂无」）。下一次需要在网络稳定的窗口里再跑一次独立探测消费者。
