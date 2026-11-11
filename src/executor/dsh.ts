@@ -181,7 +181,8 @@ export class WorkerSlots {
    * @param running - Returns the ticket IDs whose worker holds a slot (see `DshExecutor.running`).
    * @param max - Returns the configured maximum number of concurrent worker slots.
    */
-  constructor(private readonly running: () => string[], private readonly max: () => number) {}
+  constructor(private readonly running: () => string[], private readonly max: () => number,
+    private readonly slowRunning: () => string[] = () => [], private readonly slowMax: () => number = () => 1) {}
   /** Number of slots currently in use across running workers and starting reservations. */
   used(): number { return new Set([...this.running(), ...this.starting.keys()]).size }
   /** How many launches may run concurrently: the slots not held by a running worker or a wake reservation. */
@@ -198,8 +199,13 @@ export class WorkerSlots {
   reserve(ticketId: string, by: 'launch' | 'wake' | 'person'): void {
     if (this.starting.has(ticketId)) return
     if (this.used() >= this.max() + (by === 'person' ? 1 : 0)) throw new Later('No worker slot is free')
+    // The slow lane runs one ticket at a time: the local model serves one request, so more would only queue inside it.
+    if (this.isSlow(ticketId) && this.slowUsed() >= this.slowMax()) throw new Later('The slow lane is busy')
     this.starting.set(ticketId, by)
   }
+  private isSlow(ticketId: string): boolean { return this.slowRunning().includes(ticketId) }
+  /** Slow tickets that hold a slot now: only those count, so a slow ticket waiting on a person does not block the lane. */
+  private slowUsed(): number { return new Set([...this.running(), ...this.starting.keys()].filter(id => this.isSlow(id))).size }
   /** Releases `ticketId`'s starting slot once its worker session is running or the launch/wake attempt has ended. */
   free(ticketId: string): void { this.starting.delete(ticketId) }
 }
@@ -233,7 +239,9 @@ export class DshExecutor implements Executor {
   /** Registers the `launch` and `delivery` effect handlers; both are held (concurrency limit 0) while processing is paused. */
   constructor(private readonly host: ExecutorHost) {
     this.slots = new WorkerSlots(() => host.store.tickets.open().filter(ticket => this.running(ticket)).map(ticket => ticket.id),
-      () => host.store.settings().executor.maxWorkers)
+      () => host.store.settings().executor.maxWorkers,
+      () => host.store.tickets.open().filter(ticket => ticket.slow === true).map(ticket => ticket.id),
+      () => host.store.settings().executor.slowWorkers)
     // Each launch reserves a worker slot so launches run concurrently while slots are free.
     host.effects.handle('launch', payload => this.launchQueued(payload), { limit: () => host.paused() ? 0 : this.slots.launches(),
       retry: [5000, 300_000] })
@@ -245,7 +253,12 @@ export class DshExecutor implements Executor {
     const settings = this.host.store.settings()
     // The default repository is the one the GitHub Source names; a ticket working elsewhere gets its own subtree.
     const configured = settings.sources.github?.config as { repository?: string } | undefined
-    return { ...ticket, execution: ticketExecution(ticket, outcome, settings, this.host.machine.stateDir, configured?.repository || undefined) }
+    const prepared = { ...ticket, execution: ticketExecution(ticket, outcome, settings, this.host.machine.stateDir, configured?.repository || undefined) }
+    // A request that names the marker needs nobody in a hurry, so its worker runs on the slower local model.
+    const marker = settings.executor.slowMarker
+    const slow = Boolean(settings.executor.slow) && marker !== ''
+      && ticket.origin.triggerIds.some(id => this.host.store.triggers.get(id)?.text.includes(marker))
+    return slow ? { ...prepared, slow } : prepared
   }
   /**
    * Runs the configured `executor.prepare` command for a new ticket workspace in its parent directory with the ticket's

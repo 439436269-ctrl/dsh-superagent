@@ -148,7 +148,11 @@ export class Sessions {
     }
     if ('error' in result) throw result.error
     const settings = this.host.store.settings()
-    await initializeRoleModel(ctx, result.agent, role === 'orchestrator' ? settings.eval.model : settings.executor.model)
+    // A ticket that asked for the slow lane runs on the local model; everything else keeps the executor model.
+    const ticket = role === 'worker' ? this.host.store.tickets.get(ticketOfSession(id) ?? '') : undefined
+    const model = role === 'orchestrator' ? settings.eval.model
+      : ticket?.slow === true && settings.executor.slow ? settings.executor.slow : settings.executor.model
+    await initializeRoleModel(ctx, result.agent, model)
     await this.decorate(result.agent)
     ctx.permissionPresets.set(result.agent.session, 'danger-full-access')
     await ctx.sessionController.rename({ sessionId: id as SessionId, title })

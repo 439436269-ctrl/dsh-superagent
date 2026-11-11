@@ -279,6 +279,8 @@ export interface Ticket {
   title: string
   decisionId: string
   mandate: Mandate
+  /** True when its request named the slow-lane marker, so its worker runs on the slow model. */
+  slow?: boolean
   /**
    * The repository this ticket works in, recorded when it is accepted so a deployment can serve several repositories at
    * once (docs/013-multi-repository.md). Absent on tickets accepted before the field existed, and on deployments that
