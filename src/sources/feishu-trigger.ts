@@ -28,7 +28,7 @@ export function feishuTime(value: string): string {
   return new Date(time).toISOString()
 }
 /** Converts a normalized Feishu event into a Trigger, returning undefined for messages sent by the bot itself. */
-export function feishuTrigger(input: unknown, botId: string, botAppId: string, profile?: string): Trigger | undefined {
+export function feishuTrigger(input: unknown, botId: string, botAppId: string, profile?: string, instance?: string): Trigger | undefined {
   const event = EventSchema.parse(input)
   if (event.sender_id === botId || event.sender_id === botAppId) return
   const direct = event.chat_type === 'p2p'
@@ -39,7 +39,7 @@ export function feishuTrigger(input: unknown, botId: string, botAppId: string, p
     ...(direct ? { addressed: 'direct' as const } : mentioned ? { addressed: 'mention' as const } : {}),
     at: feishuTime(event.create_time), text: withMentionNames(event.content, event.mentions),
     channel: feishuChannel(event.chat_id, event.message_id, direct, profile), ...(event.message_app_link ? { url: event.message_app_link } : {}),
-    meta: { chatId: event.chat_id, messageId: event.message_id, direct, mentioned, ...(event.root_id ? { rootId: event.root_id } : {}),
+    meta: { ...instance && instance !== SOURCE ? { instance } : {}, chatId: event.chat_id, messageId: event.message_id, direct, mentioned, ...(event.root_id ? { rootId: event.root_id } : {}),
       ...(event.parent_id ? { parentId: event.parent_id } : {}), ...(event.thread_id ? { threadId: event.thread_id } : {}) } }
 }
 export const feishuParent = (trigger: Trigger): string | undefined =>

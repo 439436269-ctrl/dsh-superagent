@@ -34,6 +34,7 @@ export function sourceContextOf(deps: SourceContextDeps, kind: { kind: string; h
   const { store } = deps
   const health = deps.sources.healthEntries(kind.health)
   return {
+    instance,
     get deployment() { return deps.deployment },
     commands: deps.commands,
     ready: deps.ready,

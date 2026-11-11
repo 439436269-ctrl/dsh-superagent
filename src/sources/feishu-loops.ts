@@ -67,23 +67,33 @@ async function watch(ctx: SourceContext, signal: AbortSignal): Promise<void> {
   }
 }
 /** Wait before restarting the event consumer: 1s after a run that stayed up for a minute, otherwise exponential backoff up to 60s. */
-/** Which Source context holds the live consumer for each app: Feishu delivers an event to one consumer, so a second one loses events. */
-const consumers = new Map<string, SourceContext>()
+/**
+ * One live consumer per app, shared by every instance of that app. Feishu delivers an event to a single consumer of an app, so instances
+ * cannot each open their own; the leader reads the stream and hands every event to the members, each of which admits it by its own chats.
+ */
+const consumers = new Map<string, { leader: SourceContext; members: Set<SourceContext> }>()
 
 export const consumerRetry = (previous: number | undefined, ranMs: number): number =>
   previous === undefined || ranMs >= 60_000 ? 1000 : Math.min(previous * 2, 60_000)
 async function consume(ctx: SourceContext, signal: AbortSignal): Promise<void> {
   const profile = enabled(ctx)?.app?.trim() ?? ''
-  const held = consumers.get(profile)
-  if (held && held !== ctx) {
-    throw new Error(`Another Feishu Source instance already consumes app "${profile || 'default'}": Feishu delivers each event to one consumer, so the second one would lose messages. Give each instance its own app in its configuration.`)
+  let group = consumers.get(profile)
+  if (!group) { group = { leader: ctx, members: new Set<SourceContext>() }; consumers.set(profile, group) }
+  const mine = group
+  mine.members.add(ctx)
+  if (mine.leader !== ctx) {
+    // A passenger keeps its loop alive without opening a second connection; the leader hands it the events.
+    await delay(30_000, undefined, { signal }).catch(() => {})
+    return
   }
-  consumers.set(profile, ctx)
   const args = ['event', 'consume', 'im.message.receive_v1', '--as', 'bot', ...profile ? ['--profile', profile] : []]
   const child = spawn(bot(ctx).cli, args,
     { stdio: ['pipe', 'pipe', 'pipe'], env: { ...process.env, ...agentEnvironment(), LARKSUITE_CLI_NO_UPDATE_NOTIFIER: '1',
       LARKSUITE_CLI_NO_SKILLS_NOTIFIER: '1' } })
-  const release = () => { if (consumers.get(profile) === ctx) consumers.delete(profile) }
+  const release = () => {
+    mine.members.delete(ctx)
+    if (mine.leader === ctx) { for (const member of mine.members) member.report('feishu', { state: 'starting', detail: "Waiting for this app's consumer, which another instance holds" }) ; consumers.delete(profile) }
+  }
   child.on('exit', release)
   const stdout = createInterface({ input: child.stdout }); const stderr = createInterface({ input: child.stderr })
   let chain = Promise.resolve(); let diagnostic = ''; let ready = false
@@ -100,13 +110,17 @@ async function consume(ctx: SourceContext, signal: AbortSignal): Promise<void> {
   stdout.on('line', (line: string) => {
     chain = chain.then(async () => {
       if (line.length > 1_048_576) throw new Error('Feishu event exceeds 1 MiB')
-      const trigger = feishuTrigger(JSON.parse(line), bot(ctx).botId, bot(ctx).appId, enabled(ctx)?.app?.trim())
-      // Events already read when the Source is disabled are dropped; the consumer stops shortly after.
-      if (!trigger || !enabled(ctx)) return
-      const chats = ctx.state.get(KV.feishu.chats) ?? {}
-      chats[String(trigger.meta.chatId)] = trigger.meta.direct === true
-      ctx.state.set(KV.feishu.chats, chats)
-      await receive(ctx, trigger)
+      const payload = JSON.parse(line)
+      for (const member of mine.members) {
+        // Events already read when the Source is disabled are dropped; the consumer stops shortly after.
+        if (!enabled(member)) continue
+        const trigger = feishuTrigger(payload, bot(member).botId, bot(member).appId, enabled(member)?.app?.trim(), member.instance)
+        if (!trigger) continue
+        const chats = member.state.get(KV.feishu.chats) ?? {}
+        chats[String(trigger.meta.chatId)] = trigger.meta.direct === true
+        member.state.set(KV.feishu.chats, chats)
+        await receive(member, trigger)
+      }
     }).catch(error => { ctx.report('feishu', { state: 'error', detail: String(error) }) })
   })
   try {
