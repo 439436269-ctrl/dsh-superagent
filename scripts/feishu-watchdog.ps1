@@ -53,6 +53,9 @@ foreach ($entry in $logs) {
 if (-not $app) { Say 'skip: no bus log shows a successful connection yet'; exit 0 }
 if ($broken -le $connected) { Say "ok: $app is connected (last connected after the last failure)"; exit 0 }
 
+# Killing the consumer only helps while the host resolves Feishu: a restart during a DNS outage just fails again, so wait for the next run.
+$dns = Resolve-DnsName open.feishu.cn -Type A -ErrorAction SilentlyContinue | Where-Object { $_.IPAddress } | Select-Object -First 1
+if (-not $dns) { Say 'skip: open.feishu.cn does not resolve right now, so a restart would fail too'; exit 0 }
 # The consumers are the processes holding the app's event stream; ending them makes the plugin open a fresh one.
 $consumers = Get-CimInstance Win32_Process -Filter "Name='lark-cli.exe'" |
   Where-Object { $_.CommandLine -match 'event\s+consume' }
