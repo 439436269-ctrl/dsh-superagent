@@ -3,11 +3,11 @@ import { tmpdir } from 'node:os'
 import { join, relative } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import { Store } from '../src/app/store.ts'
-import { Prompts, builtInBase, composePrompt, defaultPrompts, policySection, promptParts, type PromptConfig } from '../src/app/prompts.ts'
+import { Prompts, builtInBase, composePrompt, composeReviewerPrompt, defaultPrompts, policySection, promptParts, type PromptConfig } from '../src/app/prompts.ts'
 import { USER_ERRORS, UserError } from '../src/core/index.ts'
 import { KV } from '../src/kv.ts'
 import { SettingsSchema, policyVersion } from '../src/policy.ts'
-import { guides, handoffPolicy, mainAdmissionPolicy, masterPrompt, sharedPrompt, workerPrompt } from '../src/app/context.ts'
+import { guides, handoffPolicy, mainAdmissionPolicy, masterPrompt, reviewPrompt, sharedPrompt, workerPrompt } from '../src/app/context.ts'
 import { promptFile } from '../src/app/skill-files.ts'
 import { packagePath } from '../src/infra/paths.ts'
 import type { Variable } from '../src/app/execution-environment.ts'
@@ -55,6 +55,17 @@ it('assembles every role from fixed sections around the team sections, whatever 
   }
   expect(composePrompt(config, 'orchestrator')).toContain(mainAdmissionPolicy)
   expect(composePrompt(config, 'worker')).not.toContain(mainAdmissionPolicy)
+})
+
+it('composes the reviewer Session from its own brief, the team scope and the environment, never the worker rules', () => {
+  const config = { ...defaultPrompts(), communication: 'Say little.', scope: 'Finish what was asked.', delivery: 'Merge only with an approval.' }
+  const variables: Variable[] = [{ key: 'DSH_SUPERAGENT_DIR', value: '/srv/work/fix-1', description: { zh: '', en: 'This ticket\'s directory' }, owner: 'executor' }]
+  const prompt = composeReviewerPrompt(config, variables)
+  expect(prompt.startsWith(reviewPrompt)).toBe(true)
+  expect(prompt).toContain('## Ticket scope\nFinish what was asked.')
+  expect(prompt.endsWith('- DSH_SUPERAGENT_DIR = "/srv/work/fix-1": This ticket\'s directory.')).toBe(true)
+  // Delivery, replies, dispatch, work and handoff would tell a reviewer to report, reply or merge.
+  for (const fixed of [workerPrompt, masterPrompt, guides.work!, guides.replies!, handoffPolicy('worker'), 'Merge only with an approval.']) expect(prompt).not.toContain(fixed)
 })
 
 it('reads a prompt file whatever its line ends and blank lines, and names a missing or empty one', () => {

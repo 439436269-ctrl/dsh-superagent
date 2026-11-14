@@ -52,6 +52,12 @@ Before the first Assignment, if the Ticket directory does not exist, the prepare
 
 A failed command fails the Ticket and records its output. A retry or a person's message on one of the Ticket's Threads tries preparation again. A typical command uses `git worktree` to create a checkout. A pull request belongs to the Ticket when its branch's last path segment matches the Ticket's short name.
 
+### Review worker
+
+A worker can ask for an independent review before it reports ready. `orchestrator_review` reads the Ticket's change — the pull request it names with `pr_number`, or its branch and working tree against `base` (default `origin/HEAD`) — and starts the Ticket's reviewer Session. That Session is a peer of the worker Session, not a subagent: `reviewer-<ticket id>`, its own `dsh-superagent-reviewer` preset, its own prompt, and its model (`executor.reviewerModel`, or the worker's model when unset). It reads files and runs read-only shell commands; it has no write, edit, subagent, report, reply or handoff tool, so it cannot change the change it reviews or act for the Ticket.
+
+The reviewer receives the Ticket's requirements and the diff (cut at a length that keeps the message small), with the command that reads the rest, and answers with findings by severity and location, ending with a verdict. The tool call waits for that answer and returns it to the worker, naming a `review/<id>` resource for an answer too long for the tool result. A review that fails or times out leaves the worker free to report what it has: it holds no worker slot, records no Report and writes no Ticket state.
+
 ### Concurrency
 
 A Ticket holds a worker slot from the start of a launch, including preparation, or from the delivery that wakes its idle Executor. It also holds the slot throughout an active turn.
