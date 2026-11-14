@@ -91,6 +91,8 @@ const CommandNameSchema = z.string().regex(/^[A-Za-z0-9._-]+$/).refine(name => n
 /** Executor settings: worker model, concurrency, ticket directory root (empty defaults to `<stateDir>/work`), `prepare` command, and blocked commands. */
 export const ExecutorConfigSchema = z.object({
   model: RoleModelSchema.nullable().default(null),
+    /** The model of the independent reviewer Session; null uses the worker model. */
+    reviewerModel: RoleModelSchema.nullable().default(null),
     /** The model of the slow lane: a ticket whose request names `slowMarker` runs on it, one such ticket at a time. */
     slow: RoleModelSchema.nullable().default(null),
     /** The word that sends a ticket to the slow lane; empty turns the lane off. */
