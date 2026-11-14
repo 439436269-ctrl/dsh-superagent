@@ -8,7 +8,7 @@ import { Button, DisclosureRow, Icon, InfoTip, Input, Pill, SegmentedControl, Sw
 import { SaveBar } from './draft.tsx'
 import { useAction, usePanel } from './provider.tsx'
 import { DecisionLine } from './rows.tsx'
-import { ConfigHistory, Field, Fields, ModelField, SourceField, numberOf, useBlockDraft, useSettings } from './settings-kit.tsx'
+import { ConfigHistory, Field, Fields, ModelField, SourceField, SwitchRow, numberOf, useBlockDraft, useSettings } from './settings-kit.tsx'
 import { localized, valueLabel, when } from './text.ts'
 import { Hint, LabelValue, LoadMore, LoadState, Section, StatusHead } from './widgets.tsx'
 
@@ -56,6 +56,8 @@ function RuleRow({ rule, expanded, onToggle, onChange, onDuplicate, onRemove }: 
             placeholder={t('ruleInstructionPlaceholder')}
             onChange={event => onChange({ ...rule, instruction: event.target.value })} />
         </Field>
+        <SwitchRow label={t('ruleWorkspace')} hint={t('ruleWorkspaceHint')} checked={rule.workspace}
+          onChange={workspace => onChange({ ...rule, workspace })} />
         <div className="dt-actions">
           <Button variant="ghost" size="sm" icon={<Icon name="copy" />} onClick={onDuplicate}>{t('duplicate')}</Button>
           <Button variant="ghost" size="sm" icon={<Icon name="trash" />} onClick={onRemove}>{t('remove')}</Button>
@@ -152,7 +154,7 @@ function PolicyBlock() {
   const reveal = (target: EventTarget) => { if (target instanceof Element
     && target.closest('.dt-rules')) setExpanded(new Set(policy.rules.map(rule => rule.id))) }
   const part = (id: string) => (policy.sources[id] ?? { allowed: [] }) as Part
-  const add = () => insert({ id: crypto.randomUUID(), name: '', enabled: true, instruction: '' }, policy.rules.length)
+  const add = () => insert({ id: crypto.randomUUID(), name: '', enabled: true, instruction: '', workspace: true }, policy.rules.length)
   return <form className="dt-form dt-block" onSubmit={event => { void draft.submit(event) }}
     onInvalidCapture={event => reveal(event.target)}>
     <Fields disabled={draft.busy}>
