@@ -1,6 +1,7 @@
 /** Executor Session tools for reading ticket context, acknowledging requests, managing threads, handing back out-of-scope triggers, and reporting status. */
 import { z } from 'zod'
 import { liveTicket, type EngineForExecutor, type Ticket } from '../../core/index.ts'
+import type { Review, ReviewRequest } from '../../executor/review.ts'
 import { IM_WORDS } from '../../infra/text.ts'
 import { claimPull, readPull } from '../../sources/github-pull.ts'
 import type { SourceContext } from '../../sources/host.ts'
@@ -10,8 +11,7 @@ import { reportRelay, threadFollowedNotice } from '../notices.ts'
 import type { Sessions } from '../sessions.ts'
 import { AcknowledgementSchema, readTool, tool, type Tool } from './tool.ts'
 
-export interface ExecutorToolsHost {
-  readonly engine: Pick<EngineForExecutor, 'report' | 'reply' | 'markUnrelated' | 'handback' | 'followForContext'>
+export interface ExecutorToolsHost {  readonly engine: Pick<EngineForExecutor, 'report' | 'reply' | 'markUnrelated' | 'handback' | 'followForContext'>
   readonly store: Pick<Store, 'tickets' | 'replyStatus' | 'atomic'>
   readonly sessions: Pick<Sessions, 'relay' | 'notify'>
   readonly resources: ResourceHost
@@ -20,7 +20,11 @@ export interface ExecutorToolsHost {
   sendReplies(): Promise<void>
   /** Delivers one message into the dispatcher Session that owns this ticket. */
   dispatcher(text: string, signal: AbortSignal): Promise<{ delivered: boolean }>
+  /** Asks the ticket's independent reviewer Session to read a change and answer with findings. */
+  review(ticket: Ticket, request: ReviewRequest, signal: AbortSignal): Promise<Review>
 }
+/** How much of a review a tool result carries inline; a longer one stays readable through its `read` resource. */
+const REVIEW_INLINE = 6000
 
 export function executorTools(host: ExecutorToolsHost, ticket: Ticket): Tool[] {
   const ticketId = ticket.id
@@ -32,6 +36,21 @@ export function executorTools(host: ExecutorToolsHost, ticket: Ticket): Tool[] {
   return [
     readTool('Read one page of a resource of this ticket that the resource parameter lists. Follow next_offset, and next_resource where a page names one.',
       true, (resource, offset, limit, signal) => readResource(host.resources, resource, offset, limit, ticketId, signal)),
+    tool({
+      name: 'orchestrator_review',
+      description: 'Get an independent review of this ticket\'s change in a separate read-only Session before reporting ready. '
+        + 'Pass pr_number, or base (a git ref) for an unpushed change; fix blocker and major findings or say why not.',
+      schema: z.object({
+        pr_number: z.number().int().positive().optional().describe('The pull request to review.'),
+        base: z.string().trim().min(1).max(200).optional().describe('Without a pull request: the git ref to compare with, such as origin/main. Defaults to origin/HEAD.'),
+        focus: z.string().trim().max(500).optional().describe('What to look at most closely; context only.'),
+      }).strict(),
+      execute: async (args, signal) => {
+        const { review, ...result } = await host.review(ticket, args, signal)
+        return { ...result, chars: review.length, review: review.length <= REVIEW_INLINE ? review
+          : `${review.slice(0, REVIEW_INLINE)}\n… (${review.length} characters; read the rest with orchestrator_read ${result.read})` }
+      },
+    }),
     tool({
       name: 'orchestrator_event',
       description: 'Send one message to the dispatcher Session that owns this ticket, such as "this needs a decision on X" or "another ticket should own Y". It reaches the dispatcher as its own user would write it, so it can assign work; it does not change this ticket and it is not a report.',

@@ -2,7 +2,7 @@
 import { z } from 'zod'
 import { UserError, key } from '../core/index.ts'
 import { policyVersion, type Settings, type SettingsOrigin } from '../policy.ts'
-import { masterPrompt, workerPrompt, sharedPrompt, guides, mainAdmissionPolicy, handoffPolicy, teamDefaults, sourceSkills, cliNotes } from './context.ts'
+import { masterPrompt, workerPrompt, reviewPrompt, sharedPrompt, guides, mainAdmissionPolicy, handoffPolicy, teamDefaults, sourceSkills, cliNotes } from './context.ts'
 import { environmentLines, type Variable } from './execution-environment.ts'
 import { promptsNotice } from './notices.ts'
 import type { Sessions } from './sessions.ts'
@@ -116,6 +116,15 @@ export function promptParts(config: PromptConfig, role: Role, environment?: stri
 }
 export function composePrompt(config: PromptConfig, role: Role, environment?: string, policy?: { key: string; text: string }): string {
   return promptParts(config, role, environment, policy).map(part => part.text).join('\n\n')
+}
+/**
+ * The reviewer Session's prompt: its fixed brief, the team's Ticket scope, and the execution environment. It is not an
+ * overridable prompt section: a reviewer reads the same scope as a worker, but none of its delivery, reply, dispatch or
+ * handoff rules, which would tell it to merge, report or reply.
+ */
+export function composeReviewerPrompt(config: PromptConfig, variables: Variable[] | undefined): string {
+  const scope = config.scope ? `\n\n## Ticket scope\n${config.scope}` : ''
+  return `${reviewPrompt}${scope}\n\n${environmentSection(config, variables)}`
 }
 export function composeSkill(config: PromptConfig, name: string): string {
   return name === 'feishu' || name === 'github' ? builtIn(config, `skill/${name}`) : config.skills[name] ?? ''

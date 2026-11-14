@@ -46,6 +46,7 @@ export const RESOURCES: readonly { name: string; holds: string; executor?: true 
     + 'source:<id>' },
   { name: 'prompts', holds: 'the prompt revision each Session reads, the skills, and the saved versions' },
   { name: 'prompts/<revision>', holds: 'one prompt version by number, or current, the one the Session works under', executor: true },
+  { name: 'review/<id>', holds: 'the whole answer of one review this ticket asked for, when its tool result was shortened', executor: true },
   { name: 'prompts/defaults', holds: 'the built-in prompt configuration, and the built-in parts by the key an override names' },
   { name: 'prompt-preview/<id>', holds: 'a composed prompt that orchestrator_prompts_save previewed' },
   { name: 'models', holds: 'model providers, the DSH default and each role\'s model' },
@@ -188,9 +189,15 @@ const ROUTES: readonly Route[] = [
     if (body === undefined) throw new Error('Unknown preview for this Session')
     return text(read, body)
   }],
+  ['review/', read => {
+    if (!read.ticketId) throw new Error('This resource belongs to an Executor Session')
+    const body = read.host.pages.get(`${read.sessionId}:${read.resource}`)
+    if (body === undefined) throw new Error('Unknown review for this Session')
+    return text(read, body)
+  }],
   ['models', async read => {
     const host = main(read), catalog = await host.context.sessionController.modelCatalog(), settings = host.store.settings()
-    const roles = { orchestrator: settings.eval.model, worker: settings.executor.model }
+    const roles = { orchestrator: settings.eval.model, worker: settings.executor.model, reviewer: settings.executor.reviewerModel }
     return { default: catalog.default, roles, failures: catalog.failures,
       providers: catalog.groups.map(group => ({ id: group.id, name: group.name, count: group.models.length, read: `models/${group.id}` })) }
   }],

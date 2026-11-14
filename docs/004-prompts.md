@@ -62,6 +62,10 @@ Executors also read DeepSeek Harness's coding prompt and the repository's `AGENT
 
 Executors work unattended. Their tools exclude those that ask a person, present UI to them or change the profile, such as `ask_user_question`, `present` and `plugin_manager`.
 
+### Reviewer Sessions
+
+A Ticket's independent reviewer is a third Session role, `reviewer-<ticket id>`, beside the worker. It is neither an Executor nor a subagent: it reads a change the worker asks it to review and answers with findings, and it never reports, replies or merges. Its prompt is fixed in `prompts/review.md`, followed by the team's **Ticket scope** and the execution environment; the communication and delivery sections, the worker's work and handoff instructions and the main Session's dispatch and Policy sections are deliberately left out. The brief is not an overridable prompt part: a team can change the worker-facing rules that ask for a review, but not the reviewer's read-only contract. Its model is the Execution settings' `reviewerModel` model, or the worker's model when that is empty.
+
 From strongest to weakest:
 
 1. Facts enforced by tools and the host: identities, permissions, tool argument checks, reply purposes, length limits. Prompt text cannot change them.
