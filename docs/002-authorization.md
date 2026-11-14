@@ -102,6 +102,8 @@ Explicit requests work in every mode. Start in `observe` and switch to `auto` af
 
 Each rule describes a kind of proactive work. The Ticket's Mandate records the matched rules, and its Executor receives their names and instructions.
 
+A rule can set `workspace` to `false` when its Tickets need no code directory, such as a rule that only answers questions. Such a Ticket gets an empty directory instead of a worktree, and the prepare command does not run.
+
 For that Ticket, a rule's process and communication requirements override the defaults. A silence rule can suppress an acknowledgement; a review rule can name the required reviewer and approval before merge. Requirements that apply to every Ticket belong in team prompt sections instead.
 
 ## Policy version

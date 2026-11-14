@@ -1632,3 +1632,30 @@ describe('ignores from the card', () => {
     expect(() => h.engine.decide('5', { kind: 'accept', title: 'Fix', scope: 'small', reason: 'chat' })).toThrow(new UserError('notExplicit'))
   })
 })
+describe('answers an ignore', () => {
+  it('posts the reason of a person\'s explicit ignore when the assessment omits a reply, and the reply it writes otherwise', () => {
+    const h = harness()
+    h.engine.receive(trigger('1')); h.pump()
+    h.decide(h.requests[0]!, { kind: 'ignore', reason: 'This is a price question, not a repository request.' })
+    // The person already had the acknowledgement; the reason is their final answer rather than silence.
+    expect(h.outbox.filter(item => item.kind === 'reply')).toEqual([{ id: key('reply', '1'), channel: trigger('1').channel,
+      text: 'This is a price question, not a repository request.', kind: 'reply' }])
+    // A reply the assessment wrote goes out as written, not replaced by the reason.
+    h.engine.receive(trigger('2', { threads: [{ source: 'chat', id: 't2' }] })); h.pump()
+    h.decide(h.requests.at(-1)!, { kind: 'ignore', reason: 'No rule matches.', reply: '我查不到这个件号的价格。' })
+    expect(h.outbox.at(-1)).toMatchObject({ id: key('reply', '2'), text: '我查不到这个件号的价格。', kind: 'reply' })
+  })
+  it('leaves an inferred message unanswered, and sends nothing when the person\'s message has no channel', () => {
+    const h = harness()
+    accepted(h)
+    // A person sent the guest's message to Eval from the panel, so it is an inferred candidate rather than the ticket's.
+    h.engine.receive(trigger('2', { actor: guest })); h.engine.reevaluate('2'); h.pump()
+    expect(h.requests.at(-1)!.strength).toBe('inferred')
+    h.decide(h.requests.at(-1)!, { kind: 'ignore', reason: 'Chatter between other people.' })
+    expect(h.outbox.filter(item => item.kind === 'reply')).toEqual([])
+    // An explicit ignore with no channel to answer on sends nothing either.
+    h.engine.receive(trigger('3', { threads: [{ source: 'chat', id: 't3' }], channel: undefined })); h.pump()
+    h.decide(h.requests.at(-1)!, { kind: 'ignore', reason: 'Thanks.' })
+    expect(h.outbox.filter(item => item.kind === 'reply')).toEqual([])
+  })
+})
