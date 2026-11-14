@@ -105,13 +105,15 @@ it('adds, copies, renames, disables and deletes rules in Policy without touching
   await click(zh.addRule)
   await type(field<HTMLInputElement>(zh.ruleName), '文档')
   await type(field<HTMLTextAreaElement>(zh.ruleInstruction), '修复失效链接')
+  // Answer-only rules need no code directory: the toggle saves `workspace: false` on the rule.
+  await click(zh.ruleWorkspace)
   await click(zh.duplicate)
   expect(all('.dt-rule').map(rule => rule.querySelector('[data-disclosure-row]')!.textContent)).toEqual(expect.arrayContaining([expect.stringContaining('文档 副本')]))
   await click('启用规则：文案修改')
   const removeButtons = all('button').filter(button => button.textContent === '删除')
   await click(removeButtons.at(-1)!)
   await click(zh.save)
-  expect(server.settings.policy.rules.map(rule => [rule.name, rule.enabled])).toEqual([['文案修改', false], ['文档', true]])
+  expect(server.settings.policy.rules.map(rule => [rule.name, rule.enabled, rule.workspace])).toEqual([['文案修改', false, true], ['文档', true, false]])
   expect(server.requests.filter(request => request.method === 'PUT').map(request => request.path)).toEqual(['settings/policy'])
 })
 

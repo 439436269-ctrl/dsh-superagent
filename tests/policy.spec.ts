@@ -238,7 +238,7 @@ describe('settings migration', () => {
       sources: { feishu: { enabled: true, config: { chats: [], directMessages: true }, authority: { chats: [] } } },
     }))
     expect(saved.policy).toEqual({
-      rules: [{ id: 'visual', name: 'V', enabled: true, instruction: 'x' }],
+      rules: [{ id: 'visual', name: 'V', enabled: true, instruction: 'x', workspace: true }],
       sources: { feishu: { allowed: [{ id: MEMBER, name: 'Alice' }, { id: 'ou_bob', name: 'Bob' }], syncChat: CHAT, admission: {} }, github: { allowed: [{ id: 'alice' }, { id: 'carol' }], admission: {} } },
     })
     expect(saved).toMatchObject({ paused: false, executor: { model: null, maxWorkers: 2, directory: '', prepare: '', blockedCommands: [] } })
@@ -333,6 +333,13 @@ describe('admission table settings', () => {
   })
 })
 describe('rule judgements', () => {
+  it('makes a rule need a code directory unless it says otherwise, so stored settings keep their behavior', () => {
+    expect(SettingsSchema.parse({}).policy.rules.every(rule => rule.workspace)).toBe(true)
+    expect(SettingsSchema.parse({ policy: { rules: [{ id: 'help', name: 'Help', enabled: true, instruction: 'Answer questions.' }] } })
+      .policy.rules[0]!.workspace).toBe(true)
+    expect(SettingsSchema.parse({ policy: { rules: [{ id: 'help', name: 'Help', enabled: true, instruction: 'Answer questions.',
+      workspace: false }] } }).policy.rules[0]!.workspace).toBe(false)
+  })
   it('refuses an assessment that judges one enabled rule twice and leaves another unjudged', () => {
     const parsed = SettingsSchema.parse({ eval: { mode: 'auto' }, policy: { rules: [{ id: 'copy', name: 'Copy', enabled: true, instruction: 'Fix typos.' },
       { id: 'visual', name: 'Visual', enabled: true, instruction: 'Fix colors.' }] } })

@@ -1,4 +1,5 @@
 /** Concurrent runtime behavior across overlapping triggers, deliveries, and worker launches. */
+import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { latestAssignment, waitsForPerson, type Ticket, type Trigger } from '../src/core/index.ts'
 import { Later } from '../src/app/effects.ts'
@@ -900,6 +901,22 @@ describe('the Executor\'s parts', () => {
     expect(execution.assignment).not.toContain(mandateInstructions(ticket.mandate))
     expect(execution.assignment).toContain('- Copy fixes (copy): Fix typos only.')
     expect(mandateInstructions({ strength: 'explicit' })).toBe('')
+  })
+  it('sends a Ticket whose rule needs no code directory to an empty answers folder, and leaves the others in worktrees', () => {
+    const settings = (workspace?: boolean) => SettingsSchema.parse({ policy: { rules: [{ id: 'help', name: 'Capability questions',
+      enabled: true, instruction: 'Answer questions only.', ...workspace === undefined ? {} : { workspace } }] } })
+    const ticket = { id: 'ticket-0123456789abcdef', origin: { triggerId: 'tr1', triggerIds: [] },
+      mandate: { strength: 'inferred', policyVersion: 'v1', basis: { rules: ['help'] }, actor: { source: 'github', id: 'alice' },
+        scope: '' } } as unknown as Ticket
+    const outcome = { kind: 'accept', title: 'Answer', scope: 'the question', reason: 'r', name: 'answer-help' } as never
+    const answers = ticketExecution(ticket, outcome, settings(false), '/state')
+    // A workless Ticket still gets a directory of its own, and the launch creates it empty instead of preparing a worktree.
+    expect(answers).toMatchObject({ name: 'answer-help-ticket-01234', workless: true })
+    expect(answers.directory.endsWith(join('answers', 'answer-help-ticket-01234'))).toBe(true)
+    // The field defaults to true, so a rule that does not set it keeps creating a worktree, as before.
+    const normal = ticketExecution(ticket, outcome, settings(), '/state')
+    expect(normal.workless).toBeUndefined()
+    expect(normal.directory.endsWith(join('worktrees', 'answer-help-ticket-01234'))).toBe(true)
   })
   it('renders each kind of Input as its worker reads it, inline, and no reopen Input', () => {
     const asked = { id: 'tr1', source: 'feishu', threads: [{ source: 'feishu', id: 'oc:om_1' }], actor: { source: 'feishu', id: 'ou_a' }, human: true,

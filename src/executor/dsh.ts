@@ -94,15 +94,15 @@ export function mandateInstructions(mandate: Pick<Mandate, 'strength'>): string 
     + 'internal to one module within the accepted rule scope. If it requires public-interface or behavior changes, new interaction, product '
     + 'decisions or clarification, stop and report dropped; do not expand scope.' : ''
 }
-/** Builds a newly accepted ticket's Execution metadata: its worktree name, workspace directory, and assignment text. */
+/** Builds a newly accepted ticket's Execution metadata: its worktree name, workspace directory, assignment text, and whether it needs a code directory. */
 export function ticketExecution(ticket: Ticket, outcome: Extract<AssessmentOutcome, { kind: 'accept' }>, settings: Settings,
   stateDir: string, defaultRepository?: string): Execution {
   const name = ticketWorktreeName(outcome.name ?? '', ticket.id)
   const source = ticket.origin.triggerId
   const note = outcome.note ? `\nRouting note (not the source request): ${outcome.note}` : ''
   const ruleIds = ticket.mandate.basis.rules
-  const rules = settings.policy.rules.filter(rule => ruleIds?.includes(rule.id))
-    .map(rule => `\n- ${rule.name} (${rule.id}): ${rule.instruction}`).join('')
+  const matched = settings.policy.rules.filter(rule => ruleIds?.includes(rule.id))
+  const rules = matched.map(rule => `\n- ${rule.name} (${rule.id}): ${rule.instruction}`).join('')
   const precedence = rules ? `\nMatched rules; their procedure and communication instructions take precedence over the default acknowledgement and messaging policy for this ticket:${rules}` : ''
   // The origin trigger is delivered alongside the assignment, so `assignment` omits the trigger text.
   const assignment = ticket.mandate.strength === 'inferred' && ruleIds
@@ -113,7 +113,9 @@ export function ticketExecution(ticket: Ticket, outcome: Extract<AssessmentOutco
   const root = executionRoot(settings, stateDir)
   // Every ticket's worktree sits in the repository's own `worktrees` folder, so a repository adds one folder, not one per ticket.
   const home = repositoryDirectory(settings, stateDir, ticket.repository ?? defaultRepository)
-  return { name, directory: join(home, 'worktrees', name), assignment }
+  // A rule can say its tickets need no code directory: such a ticket gets an empty folder beside the worktrees, and the prepare command does not run.
+  const workless = matched.some(rule => rule.workspace === false)
+  return { name, directory: join(home, workless ? 'answers' : 'worktrees', name), assignment, ...workless ? { workless } : {} }
 }
 /** Character limits for inline assignment and trigger text in worker messages; longer text is read via its resource. */
 const ASSIGNMENT_CHARS = 1500, TRIGGER_CHARS = 600
@@ -481,7 +483,9 @@ export class DshExecutor implements Executor {
     if (!current()) return
     // Prepare the workspace directory once; an existing directory counts as already prepared, including worktrees created before `prepare` commands existed.
     if (!await stat(workspace).then(() => true, () => false)) {
-      await this.prepareDirectory(ticket)
+      // A ticket whose rules need no code directory gets an empty folder, and the prepare command does not run.
+      if (ticket.execution?.workless) await mkdir(workspace, { recursive: true })
+      else await this.prepareDirectory(ticket)
       if (!current()) return
     }
     if (!current()) return

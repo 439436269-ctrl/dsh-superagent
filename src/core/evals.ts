@@ -4,7 +4,7 @@ import { UserError } from './errors.ts'
 import { liveTicket, threadKey } from './model.ts'
 import type { Decision, DecisionKind, Evaluation, Mandate, MandateBasis, Strength, Thread, Trigger } from './model.ts'
 import type { AssessmentOutcome, Candidate, Policy } from './ports.ts'
-import { said, type Reason } from './reasons.ts'
+import { reasonText, said, type Reason } from './reasons.ts'
 import { EnginePart, type EngineOptions } from './part.ts'
 import type { Tickets } from './tickets.ts'
 
@@ -154,9 +154,14 @@ export class Evals extends EnginePart {
     }
     const decision = this.decideEval(thread, evaluation, outcome)
     // A reply an ignore carries goes out where the message was written, so nothing addressed to the agent stays
-    // unanswered. It is not a ticket's answer, so it names no ticket.
-    if (outcome.kind === 'ignore' && outcome.reply && trigger.channel && trigger.human) {
-      this.options.outbox.send({ id: key('reply', trigger.id), channel: trigger.channel, text: outcome.reply, kind: 'reply' })
+    // unanswered. A person's explicit request whose ignore carries no reply gets its reason as that final answer, so
+    // an omitted reply never leaves them without one after an acknowledgement. It is not a ticket's answer, so it names
+    // no ticket.
+    const reply = outcome.kind === 'ignore'
+      ? outcome.reply ?? (trigger.human && evaluation.strength === 'explicit' ? reasonText(decision.reason) : undefined)
+      : undefined
+    if (outcome.kind === 'ignore' && reply && trigger.channel && trigger.human) {
+      this.options.outbox.send({ id: key('reply', trigger.id), channel: trigger.channel, text: reply, kind: 'reply' })
     }
     return decision
   }
