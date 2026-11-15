@@ -24,6 +24,11 @@ export interface Policy {
   admitsInferred(rules: readonly string[]): boolean
   /** How long an assessor may take before an eval is recorded as unavailable. */
   evalTimeoutMs: number
+  /**
+   * Whether the host sends a person's request acknowledgement (`receipt`) and a ticket's completion result
+   * (`completion`) itself, instead of leaving both to a Session's prompt. See docs/003.
+   */
+  replies: { receipt: boolean; completion: boolean }
 }
 
 /** What the assessor receives: bounded facts, never authority. */

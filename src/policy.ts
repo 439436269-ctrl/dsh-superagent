@@ -89,6 +89,15 @@ export const EvalConfigSchema = z.object({
   timeoutSeconds: z.number().int().min(LIMITS.evalTimeoutSeconds.min).max(LIMITS.evalTimeoutSeconds.max).default(120),
   model: RoleModelSchema.nullable().default(null),
 }).strict()
+/**
+ * Reply settings: whether the host itself answers a person's request (`receipt`) and its result (`completion`), so the
+ * conversation hears from the agent even when a Session's turn does not write a message. Both default on; a deployment
+ * that turns one off leaves that message to the Session's own prompts and tools.
+ */
+export const RepliesConfigSchema = z.object({
+  receipt: z.boolean().default(true),
+  completion: z.boolean().default(true),
+}).strict()
 const CommandNameSchema = z.string().regex(/^[A-Za-z0-9._-]+$/).refine(name => name !== '.' && name !== '..', 'Not a command name')
   .refine(name => !WORKER_COMMANDS.includes(name), `${WORKER_COMMANDS.join(', ')} cannot be blocked`)
 /** Executor settings: worker model, concurrency, ticket directory root (empty defaults to `<stateDir>/work`), `prepare` command, and blocked commands. */
@@ -116,9 +125,10 @@ export const SettingsSchema = z.object({
   policy: PolicyConfigSchema.default(() => PolicyConfigSchema.parse({})),
   eval: EvalConfigSchema.default(() => EvalConfigSchema.parse({})),
   executor: ExecutorConfigSchema.default(() => ExecutorConfigSchema.parse({})),
+  replies: RepliesConfigSchema.default(() => RepliesConfigSchema.parse({})),
 }).strict()
 export type Settings = z.infer<typeof SettingsSchema>
-export type SettingsBlock = 'policy' | 'eval' | 'executor' | `source:${string}`
+export type SettingsBlock = 'policy' | 'eval' | 'executor' | 'replies' | `source:${string}`
 export type SettingsSave = SettingsBlock | 'pause'
 export type SettingsOrigin = 'panel' | 'tool' | 'sync'
 
@@ -202,6 +212,7 @@ export function settingsPolicy(settings: Settings, sources: SourceScope): Policy
   }
   return {
     version, paused: settings.paused, evalTimeoutMs: settings.eval.timeoutSeconds * 1000,
+    replies: { receipt: settings.replies.receipt, completion: settings.replies.completion },
     gate(trigger: Trigger, thread, tickets) {
       if (!trigger.human) return machineGate(trigger)
       // A dispatch is the operator speaking through the main Session, not a message from a Source, so no allow-list applies.

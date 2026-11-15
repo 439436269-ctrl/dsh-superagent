@@ -54,7 +54,7 @@ export class Tickets extends EnginePart {
     const assignment = this.newAssignment(ticket)
     this.repo.tickets.save(ticket)
     for (const triggerId of triggerIds) for (const ref of this.repo.triggers.get(triggerId)?.threads ?? []) this.subscribe(id, ref)
-    if (outcome.acknowledgement && primary) this.replies.acknowledgeAccepted(id, primary, outcome.acknowledgement)
+    if (primary) this.replies.receipt(ticket, primary, outcome.acknowledgement)
     this.options.executor.start(this.require(id), assignment)
     this.emit('ticket.created', { ticketId: id, decisionId, strength: mandate.strength })
   }
@@ -145,6 +145,9 @@ export class Tickets extends EnginePart {
     }
     // The worker has the message already, so the note comes with it again.
     else if (note) this.addInput(ticket, input(key('input', ticketId, 'trigger', trigger.id, 'note', note)))
+    // A person routed this message to a ticket, so their conversation hears that the ticket has it; a later worker
+    // acknowledgement reuses the same message.
+    this.replies.receipt(this.require(ticketId), trigger)
   }
   /**
    * Ask a running worker whose latest report is `waiting` for a status report; leaves any other ticket alone.

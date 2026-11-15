@@ -256,6 +256,7 @@ describe('settings migration', () => {
       eval: { mode: 'auto', timeoutSeconds: 90, model: { provider: 'p', model: 'm' } },
       executor: { model: null, reviewerModel: null, slow: null, slowMarker: '不急', slowWorkers: 1, maxWorkers: 5, directory: '', prepare: '',
         blockedCommands: [] },
+      replies: { receipt: true, completion: true },
     })
     expect(migrateSettings(migrated)).toEqual(migrated)
   })
@@ -273,6 +274,11 @@ it('renames the variables a stored prepare command reads from earlier project na
 it('reads a stored GitHub Source configuration that names a merge account without it', () => {
   const settings = SettingsSchema.parse(migrateSettings({ sources: { github: { enabled: true, config: { repository: 'acme/widgets', cli: 'gh-agent', mergeCli: 'gh-merge-account', pollSeconds: 120 } } } }))
   expect(settings.sources.github!.config).toEqual({ repository: 'acme/widgets', cli: 'gh-agent', pollSeconds: 120 })
+})
+
+it('sends the receipt and the completion reply by default, and lets a deployment switch either off', () => {
+  expect(SettingsSchema.parse({}).replies).toEqual({ receipt: true, completion: true })
+  expect(SettingsSchema.parse({ replies: { completion: false } }).replies).toEqual({ receipt: true, completion: false })
 })
 
 describe('assessment outcomes', () => {

@@ -183,6 +183,13 @@ A malformed item in a GitHub list or a Feishu page is skipped, and the Source's 
 Outgoing messages are stored and sent as stored work, retried with backoff from 5 seconds, doubling up to 300.
 
 A Ticket's messages to one conversation go out in the order they were queued, so its acknowledgement comes before its later answer or result: a message waits while an earlier one of the same Ticket to the same conversation has not gone out, until that one has failed three times in a row and shows as a problem.
+### Messages the host sends
+
+Two replies do not wait for a Session's turn to write them; **Settings → Eval → Replies** switches each on or off, both on by default.
+
+The **receipt** answers a person's request as soon as the host has it: on acceptance, in the conversation that wrote the triggering message, with the assessment's own sentence when it wrote one and a short default naming the Ticket otherwise; a message routed onto an existing Ticket gets the same answer there. It is queued under the same id as the Executor's `orchestrator_ack`, so whichever comes second reuses the first instead of repeating it. A message not addressed to the agent gets no default.
+
+The **completion** answers the source conversation when the Executor reports `ready` or `dropped`, with the `message` that report supplies and a short default otherwise. It is queued once per report, so a resumed Ticket's later result is its own message. A `result` reply the main Session sends for that Ticket afterwards reuses the host's message instead of sending a second one; with the switch off, both are left to the prompts and tools as before.
 
 Messages of other Tickets, and messages of no Ticket, do not wait for it.
 
