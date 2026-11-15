@@ -166,6 +166,20 @@ it('lets a profile claim one Feishu chat, not the whole Source kind or another c
   expect(other.ticket.execution).not.toHaveProperty('worker')
 })
 
+it('routes two claimed chats of one Source to their own profiles', async () => {
+  // The fixture listens to oc_team only; let it also receive mentions in other chats so the second ticket exists.
+  const settings = h.runtime.store.settings()
+  const feishuSource = settings.sources.feishu!
+  h.runtime.store.saveSettings({ ...settings, sources: { ...settings.sources,
+    feishu: { ...feishuSource, config: { ...feishuSource.config, otherChats: 'mentions' } } } })
+  h.runtime.workers.register({ ...textile, id: 'team-textile', match: trigger => trigger.meta.chatId === CHAT })
+  h.runtime.workers.register({ ...textile, id: 'other-textile', match: trigger => trigger.meta.chatId === 'oc_other' })
+  const team = await h.acceptedTicket(feishu('1', '@bot cs1701 price'))
+  const other = await h.acceptedTicket(feishu('5', '@bot other chat', { chat_id: 'oc_other' }))
+  expect(team.ticket.execution?.worker).toBe('team-textile')
+  expect(other.ticket.execution?.worker).toBe('other-textile')
+})
+
 it('does not claim a Ticket accepted under a rule that names no worker', async () => {
   h.runtime.workers.register({ ...textile, id: 'chat-textile', match: trigger => trigger.meta.chatId === CHAT, workless: true,
     instructions: 'A claimed instruction.' })
