@@ -67,9 +67,12 @@ const DEFAULT_RULES = [
 /**
  * An assessment rule; its instruction may also specify PR reviewers and whether to wait for their approval.
  * `workspace` false means its Tickets need no code directory: the prepare command does not run and the Ticket gets an empty folder.
+ * `worker` names a worker profile a plugin registered (`ctx.orchestrator.workers`): those Tickets run that profile's agent
+ * preset, extra tools and instructions. Absent, or when no loaded plugin registered it, they run the bundled worker.
  */
 export const RuleSchema = z.object({ id: RuleIdSchema, name: z.string().trim().min(1).max(LIMITS.ruleName), enabled: z.boolean(),
-  instruction: z.string().trim().min(1).max(LIMITS.ruleInstruction), workspace: z.boolean().default(true) }).strict()
+  instruction: z.string().trim().min(1).max(LIMITS.ruleInstruction), workspace: z.boolean().default(true),
+  worker: z.string().trim().regex(/^[A-Za-z0-9_-]{1,80}$/).optional() }).strict()
 export type Rule = z.infer<typeof RuleSchema>
 export const RoleModelSchema = z.object({ provider: z.string().trim().min(1), model: z.string().trim().min(1), reasoningEffort: z.string().trim().min(1).optional() }).strict()
 export type RoleModel = z.infer<typeof RoleModelSchema>

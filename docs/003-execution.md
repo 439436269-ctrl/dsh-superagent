@@ -58,6 +58,14 @@ A worker can ask for an independent review before it reports ready. `orchestrato
 
 The reviewer receives the Ticket's requirements and the diff (cut at a length that keeps the message small), with the command that reads the rest, and answers with findings by severity and location, ending with a verdict. The tool call waits for that answer and returns it to the worker, naming a `review/<id>` resource for an answer too long for the tool result. A review that fails or times out leaves the worker free to report what it has: it holds no worker slot, records no Report and writes no Ticket state.
 
+### Worker profiles
+
+A plugin may register worker profiles on the `orchestrator` service (`ctx.orchestrator.workers.register`): an id, a display name, a DeepSeek Harness agent preset, additional tool names, the Sources it claims, and system-prompt instructions. A Policy rule's `worker` field names one; the field is saved through the settings tool or block, and the panel's rule form does not offer it yet. A profile whose `sources` name the Ticket's originating Source, such as a business bot's Feishu chat, applies when no matched rule names another; when two profiles claim one Source, the lower id applies.
+
+The Ticket records the profile id when it is accepted, so a later rule edit or a plugin reload does not change an open Ticket's worker. That Ticket's Session is created with the profile's agent preset, may use the profile's known tools beside the bundled work tools, and reads the profile's instructions after the team's sections and the Mandate's limits. A profile can add a tool but cannot remove a work tool or the report, reply and hand-back tools, which the host still enforces.
+
+When a rule names a profile no loaded plugin registers, or a Ticket's Source no loaded profile claims, the Ticket runs the bundled worker preset with no additional tools or instructions; an open Ticket starts using the profile again once a plugin registers it. A profile whose preset is not installed fails that Session's creation, so install the preset before enabling the rule.
+
 ### Concurrency
 
 A Ticket holds a worker slot from the start of a launch, including preparation, or from the delivery that wakes its idle Executor. It also holds the slot throughout an active turn.

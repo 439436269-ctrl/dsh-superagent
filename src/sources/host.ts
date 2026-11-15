@@ -5,6 +5,7 @@ import type { Deployment } from '../deployment.ts'
 import type { SourceRegistry } from './registry.ts'
 import type { SetupProblem } from '../setup.ts'
 import type { Family, Key } from '../kv.ts'
+import type { WorkerRegistry } from '../workers.ts'
 import { fill } from '../infra/text.ts'
 
 /** Fixed English health templates (`{name}` placeholders); the panel localizes each `code` in the interface language. */
@@ -22,6 +23,8 @@ export function health(state: Health['state'], code: HealthCode, values: Record<
 }
 export interface SourceHost {
   readonly sources: SourceRegistry
+  /** Worker profiles plugins registered: a Policy rule names one, and those Tickets run its preset, tools and instructions. */
+  readonly workers: WorkerRegistry
   /** Returns the context for one Source kind; its `report` writes only the health entries declared by the kind. */
   context(kind: { kind: string; health: readonly string[] }, instance?: string): SourceContext
 }

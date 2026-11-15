@@ -58,6 +58,8 @@ Admission instructions come from `prompts/admission.md`. They describe proactive
 
 The environment section gives the main Session deployment-wide values and each Executor its Ticket-specific values. The Policy section is regenerated from settings on every model request. It contains the Policy version, accept mode, the explicit-request exemption, and enabled rules as `- <name> (<id>): <instruction>`, or a statement that none is enabled. It is last so a Policy change leaves the preceding prompt text unchanged.
 
+A worker whose matched rule names a worker profile a plugin registered also reads that profile's instructions, after the Mandate's limits and under a `## Worker profile` heading (see [003 Execution](003-execution.md#worker-profiles)). The profile is not an overridable prompt part: a plugin supplies it, and it cannot change the gate, the Mandates or the tools the host refuses.
+
 Executors also read DeepSeek Harness's coding prompt and the repository's `AGENTS.md`; the main Session does not. An inferred Ticket adds a final note limiting its Executor to the matched rules. Assignments and incoming messages arrive inline as Trigger cards, with resource pointers only for truncated content.
 
 Executors work unattended. Their tools exclude those that ask a person, present UI to them or change the profile, such as `ask_user_question`, `present` and `plugin_manager`.
