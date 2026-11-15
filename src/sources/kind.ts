@@ -10,8 +10,9 @@ export interface Localized { zh: string; en: string }
 /** `advanced` folds a rarely changed field (such as a polling tunable) behind the card's Advanced section. */
 interface FieldBase { key: string; label: Localized; hint?: Localized; advanced?: true }
 /**
- * Configuration field specification; `rows` edits a list of records keyed by its first column, `choose` picks from
- * resolved source labels, and `fact` displays a read-only value from `facts`.
+ * Configuration field specification; `rows` edits a list of records keyed by its first column (`scalar` stores that
+ * column as bare values instead, for a plain string list), `choose` picks from resolved source labels, and `fact`
+ * displays a read-only value from `facts`.
  */
 export type FieldSpec =
   | FieldBase & { type: 'switch' }
@@ -19,7 +20,7 @@ export type FieldSpec =
   | FieldBase & { type: 'number'; min: number; max: number }
   | FieldBase & { type: 'text'; pattern?: string; readonly?: boolean; choose?: Localized }
   | FieldBase & { type: 'fact'; settings?: 'deployment' }
-  | FieldBase & { type: 'rows'; columns: ({ key: string; label: Localized; type: 'text'; pattern?: string; optional?: boolean; choose?: Localized; refresh?: Localized } | { key: string; label: Localized; type: 'select'; options: { value: string; label: Localized }[] })[] }
+  | FieldBase & { type: 'rows'; scalar?: boolean; columns: ({ key: string; label: Localized; type: 'text'; pattern?: string; optional?: boolean; choose?: Localized; refresh?: Localized } | { key: string; label: Localized; type: 'select'; options: { value: string; label: Localized }[] })[] }
 
 export interface VariableSpec { key: string; description: Localized }
 export interface EnvironmentInput<C> { deployment: Deployment; config: C; trigger?: Trigger }
