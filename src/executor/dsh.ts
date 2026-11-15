@@ -99,14 +99,15 @@ export function mandateInstructions(mandate: Pick<Mandate, 'strength'>): string 
 }
 /**
  * Resolves the worker profile a Ticket runs under: the profile named by the first matched rule, in Policy order, that names
- * one, else the registered profile whose `match` accepts the Ticket's Trigger. Only a profile registered when the Ticket is
- * accepted is selected, so a plugin loaded later cannot apply its preset to an existing Session halfway.
+ * one. A matched rule suppresses the Trigger claim, so a policy that routed the Ticket keeps it: only a Ticket with no
+ * matched rule runs the profile whose `match` accepts its Trigger. Only a profile registered when the Ticket is accepted is
+ * selected, so a plugin loaded later cannot apply its preset to an existing Session halfway.
  */
 export function workerSelection(ticket: Ticket, settings: Settings, workers: Pick<WorkerRegistry, 'get' | 'match'>,
   trigger: Trigger | undefined): Pick<WorkerProfile, 'id' | 'workless'> | undefined {
   const matched = settings.policy.rules.filter(rule => ticket.mandate.basis.rules?.includes(rule.id))
   const named = matched.find(rule => rule.worker)?.worker
-  const profile = named === undefined ? workers.match(trigger) : workers.get(named)
+  const profile = named !== undefined ? workers.get(named) : matched.length ? undefined : workers.match(trigger)
   if (!profile) return undefined
   return { id: profile.id, ...(profile.workless ? { workless: true } : {}) }
 }

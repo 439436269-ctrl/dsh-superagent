@@ -73,9 +73,12 @@ it('selects the profile a rule names, taking its workless setting, before any Tr
   const trigger = feishu('1', '@bot hi')
   expect(workerSelection(ticketOf(['lookup']), settingsOf([{ id: 'lookup', worker: 'rule-worker' }]), workers, trigger))
     .toEqual({ id: 'rule-worker' })
-  // No rule names one: the Trigger match applies, with its workless setting.
-  expect(workerSelection(ticketOf(['lookup']), settingsOf([{ id: 'lookup' }]), workers, trigger))
+  // No matched rule: the Trigger match applies, with its workless setting.
+  expect(workerSelection(ticketOf([]), settingsOf([{ id: 'lookup' }]), workers, trigger))
     .toEqual({ id: 'chat-worker', workless: true })
+  // A matched rule that names no worker keeps the bundled worker; the claim does not override the policy.
+  expect(workerSelection(ticketOf(['lookup']), settingsOf([{ id: 'lookup' }]), workers, trigger))
+    .toBeUndefined()
   // A rule that names an unregistered profile selects nothing; a Trigger match must not silently replace it.
   expect(workerSelection(ticketOf(['lookup']), settingsOf([{ id: 'lookup', worker: 'later' }]), workers, trigger))
     .toBeUndefined()
@@ -161,6 +164,24 @@ it('lets a profile claim one Feishu chat, not the whole Source kind or another c
   // The same kind in another chat is not claimed: the explicit accept records no profile.
   const other = await h.acceptedTicket(feishu('5', '@bot other chat', { chat_id: 'oc_other' }))
   expect(other.ticket.execution).not.toHaveProperty('worker')
+})
+
+it('does not claim a Ticket accepted under a rule that names no worker', async () => {
+  h.runtime.workers.register({ ...textile, id: 'chat-textile', match: trigger => trigger.meta.chatId === CHAT, workless: true,
+    instructions: 'A claimed instruction.' })
+  const settings = h.runtime.store.settings()
+  h.runtime.store.saveSettings({ ...settings, policy: { ...settings.policy, rules: [{ id: 'ops', name: 'Operations', enabled: true,
+    instruction: 'Handle operations.', workspace: true }] } })
+  const trigger = feishu('1', '@bot restart the consumer')
+  h.runtime.receive(trigger)
+  await h.runtime.idle()
+  const decision = h.runtime.engine.decide(trigger.id, { kind: 'accept', title: 'Ops', scope: 'ops', reason: 'asked', rules: ['ops'],
+    name: 'ops' } as never)
+  await h.runtime.idle()
+  const ticket = h.runtime.store.tickets.get(decision.ticketId!)!
+  expect(ticket.execution).not.toHaveProperty('worker')
+  expect(h.controller.create).toHaveBeenCalledWith(expect.objectContaining({ sessionId: `worker-${ticket.id}`, agentPreset: WORKER_PRESET }))
+  expect(h.promptSections.get(`worker-${ticket.id}`)!.text({})).not.toContain('A claimed instruction.')
 })
 
 it('falls back to the bundled worker for a rule that names a profile no plugin registered', async () => {
