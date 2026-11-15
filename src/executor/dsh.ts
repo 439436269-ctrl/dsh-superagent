@@ -18,7 +18,7 @@ import type { Sessions } from '../app/sessions.ts'
 import { WorktreeNameSchema } from '../app/assessment.ts'
 import { resultRelay } from '../app/notices.ts'
 import type { HealthEntry } from '../infra/health.ts'
-import type { WorkerRegistry } from '../workers.ts'
+import type { WorkerProfile, WorkerRegistry } from '../workers.ts'
 import { cancelled, collectJob, killJobs, runningJobs, stopBackground, stopSubagents, until, untilQuiet } from './background.ts'
 
 const now = (): string => new Date().toISOString()
@@ -99,7 +99,7 @@ export function mandateInstructions(mandate: Pick<Mandate, 'strength'>): string 
 }
 /** Builds a newly accepted ticket's Execution metadata: its worktree name, workspace directory, assignment text, and whether it needs a code directory. */
 export function ticketExecution(ticket: Ticket, outcome: Extract<AssessmentOutcome, { kind: 'accept' }>, settings: Settings,
-  stateDir: string, defaultRepository?: string, sourceWorker?: string): Execution {
+  stateDir: string, defaultRepository?: string, sourceWorker?: Pick<WorkerProfile, 'id' | 'workless'>): Execution {
   const name = ticketWorktreeName(outcome.name ?? '', ticket.id)
   const source = ticket.origin.triggerId
   const note = outcome.note ? `\nRouting note (not the source request): ${outcome.note}` : ''
@@ -116,12 +116,13 @@ export function ticketExecution(ticket: Ticket, outcome: Extract<AssessmentOutco
   const root = executionRoot(settings, stateDir)
   // Every ticket's worktree sits in the repository's own `worktrees` folder, so a repository adds one folder, not one per ticket.
   const home = repositoryDirectory(settings, stateDir, ticket.repository ?? defaultRepository)
-  // A rule can say its tickets need no code directory: such a ticket gets an empty folder beside the worktrees, and the prepare command does not run.
-  const workless = matched.some(rule => rule.workspace === false)
+  // A rule, or a worker profile claiming the Source, can say its tickets need no code directory: such a ticket gets an
+  // empty folder beside the worktrees, and the prepare command does not run.
+  const workless = matched.some(rule => rule.workspace === false) || sourceWorker?.workless === true
   // A rule may name a plugin-registered worker profile; otherwise a profile may claim the Ticket's Source. Recording the id
   // here keeps an open Ticket's worker stable when the rule or the plugin changes later. A profile the plugin no longer
   // registers runs the bundled worker.
-  const worker = matched.find(rule => rule.worker)?.worker ?? sourceWorker
+  const worker = matched.find(rule => rule.worker)?.worker ?? sourceWorker?.id
   return { name, directory: join(home, workless ? 'answers' : 'worktrees', name), assignment, ...workless ? { workless } : {}, ...worker ? { worker } : {} }
 }
 /** Character limits for inline assignment and trigger text in worker messages; longer text is read via its resource. */
@@ -263,7 +264,7 @@ export class DshExecutor implements Executor {
     // The default repository is the one the GitHub Source names; a ticket working elsewhere gets its own subtree.
     const configured = settings.sources.github?.config as { repository?: string } | undefined
     // A worker profile may claim the Ticket's Source, such as the business bot's Feishu chat, when no matched rule names one.
-    const sourceWorker = this.host.workers.match(sourceTrigger(this.host, ticket)?.source)?.id
+    const sourceWorker = this.host.workers.match(sourceTrigger(this.host, ticket)?.source)
     const prepared = { ...ticket, execution: ticketExecution(ticket, outcome, settings, this.host.machine.stateDir,
       configured?.repository || undefined, sourceWorker) }
     // A request that names the marker needs nobody in a hurry, so its worker runs on the slower local model.

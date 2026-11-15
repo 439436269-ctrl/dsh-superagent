@@ -5,6 +5,7 @@ import { WorkerRegistry } from '../src/workers.ts'
 import { WORKER_PRESET, workToolNames } from '../src/app/sessions.ts'
 import { ticketExecution } from '../src/executor/dsh.ts'
 import type { Ticket } from '../src/core/index.ts'
+import { join } from 'node:path'
 import { feishu, startRuntime, type Host } from './fixtures/host.ts'
 
 const textile = { id: 'textile', name: { zh: '超盛纺织', en: 'Chaosheng textile' }, preset: 'chaosheng-textile-preset' }
@@ -108,11 +109,13 @@ it('runs a Ticket accepted under a worker rule with that profile\'s preset and i
   expect(prompt).toContain('You are a worker.')
 })
 
-it('runs a Ticket from a Source its profile claims, even when no rule names one', async () => {
+it('runs a Ticket from a Source its profile claims, and keeps its directory empty when the profile is workless', async () => {
   // The business bot's Feishu chat is the explicit-request path: the main Session accepts it, so no rule is recorded.
-  h.runtime.workers.register({ ...textile, id: 'feishu-textile', sources: ['feishu'], instructions: 'Answer a part question in one line.' })
+  h.runtime.workers.register({ ...textile, id: 'feishu-textile', sources: ['feishu'], workless: true,
+    instructions: 'Answer a part question in one line.' })
   const { ticket } = await h.acceptedTicket(feishu('1', '@bot cs1701 price'))
-  expect(ticket.execution?.worker).toBe('feishu-textile')
+  expect(ticket.execution).toMatchObject({ worker: 'feishu-textile', workless: true })
+  expect(ticket.execution?.directory.endsWith(join('answers', ticket.execution.name))).toBe(true)
   expect(h.controller.create).toHaveBeenCalledWith(expect.objectContaining({ sessionId: `worker-${ticket.id}`, agentPreset: textile.preset }))
   expect(h.promptSections.get(`worker-${ticket.id}`)!.text({})).toContain('Answer a part question in one line.')
 })

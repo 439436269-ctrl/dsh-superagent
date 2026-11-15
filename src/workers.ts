@@ -20,6 +20,8 @@ export interface WorkerProfile {
    * A rule's `worker` wins; when two profiles claim one Source, the profile with the lower id does.
    */
   sources?: readonly string[]
+  /** Its Tickets need no code directory: an empty folder and no prepare command, as a rule's `workspace: false` does. */
+  workless?: boolean
   /** Instructions appended to the worker's system prompt, after the team's sections; the Ticket's Mandate still bounds the work. */
   instructions?: string
 }
