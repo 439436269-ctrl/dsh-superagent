@@ -236,7 +236,7 @@ Validation inherits an omitted base from the saved override, drops removed parts
 
 ### Sessions
 
-`Sessions` (`src/app/sessions.ts`) manages DeepSeek Harness Sessions for both roles. `ensure` creates a Session with its role's model and, for a worker, the agent preset of the worker profile its Ticket recorded (`WorkerRegistry` in `src/workers.ts`): the profile its matched rule named, else the one claiming its Source. A Ticket without one, or whose profile's plugin is not loaded, runs the bundled worker preset. `install` follows agent events and registers prompts, skills and tools for managed Sessions.
+`Sessions` (`src/app/sessions.ts`) manages DeepSeek Harness Sessions for both roles. `ensure` creates a Session with its role's model and, for a worker, the agent preset of the worker profile its Ticket recorded (`WorkerRegistry` in `src/workers.ts`): the profile its matched rule named, else the one whose `match` accepted its Trigger, selected while accepting. A Ticket without one, or whose profile's plugin is not loaded at acceptance, runs the bundled worker preset. `install` follows agent events and registers prompts, skills and tools for managed Sessions.
 
 `prompt` delivers once per request id. `relay` and `notify` enqueue main-Session messages handled by the `relay` and `notice` effects. `src/app/notices.ts` defines their content; `delivery` checks whether a message arrived.
 
@@ -301,7 +301,7 @@ Some generic modules still refer directly to GitHub or Feishu:
 | `src/admission.ts` | The admission table's values, each cell's options and defaults, shared with the panel |
 | `src/limits.ts` | The limits of the values a person sets, which the settings schemas check and the panel's fields offer |
 | `src/kv.ts` | `KV`: every family of `kv` records with its key, its value's type and its owner, and the `Key` and `Family` types the Store and `SourceContext.state` take |
-| `src/workers.ts` | `WorkerRegistry` and `WorkerProfile`: the preset, additional tools, claimed Sources, workless flag and instructions a plugin registers, which a Policy rule may name |
+| `src/workers.ts` | `WorkerRegistry` and `WorkerProfile`: the preset, additional tools, `match` predicate, workless flag and instructions a plugin registers, which a Policy rule may name |
 | `src/navigation.ts` | Opens a DeepSeek Harness Session from the panel once the host's catalog lists it |
 | `src/core/model.ts` | The domain types, among them the typed Ticket and `MandateBasis`, with `threadKey`, `ticketOutcome`, `reached`, `followupOwners`, `settled`, `waitsForPerson`, `liveTicket`, `runningAssignment`, `latestAssignment` and `latestReport` |
 | `src/core/ports.ts` | The ports: `Repositories`, `Policy`, `SourceScope`, `Assessor`, `Executor`, `Outbox`, and the domain events |
@@ -539,7 +539,7 @@ Each Executor has six application tools:
 A hand-back returns `queued: false` if another Ticket still owns the message, or this Ticket never owned it. For example, a bot message went to Eval independently.
 
 The worker preset is defined in `cordis.patch.yml` and selected through `WORKER_PRESET`. A Policy rule may name a worker profile a plugin registered through `ctx.orchestrator.workers`; that
-profile supplies a different agent preset, additional known tools, instructions appended to the worker prompt, and whether its Tickets need no code directory, and the Ticket records the profile id when it is accepted (see [003 Execution](003-execution.md#worker-profiles)).
+profile supplies a different agent preset, additional known tools, instructions appended to the worker prompt, and whether its Tickets need no code directory, and the Ticket records the profile id when it is accepted (see [003 Execution](003-execution.md#worker-profiles)). The profile's preset replaces the bundled one, so it must include the work tools and shell the Tickets need; `tools` adds to that set, and registration refuses person-facing and management tools.
 `WORK_TOOLS` in `src/app/sessions.ts` retains available file, search, shell, job, web, skill, todo and subagent tools. Workers do not receive tools for asking or presenting to a person, changing the profile, scheduling work outside worker slots, starting or messaging other Sessions, or editing external documents. Tool calls are refused after the Ticket ends.
 
 ### Result shapes and assessment context

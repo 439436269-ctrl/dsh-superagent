@@ -29,7 +29,7 @@ export interface SessionsHost {
   readonly store: Pick<Store, 'tickets' | 'settings' | 'get' | 'set' | 'keys'>
   readonly prompts: Pick<Prompts, 'current' | 'version' | 'compose' | 'skills'>
   readonly effects: Pick<Effects, 'enqueue' | 'handle' | 'idle' | 'pending'>
-  /** Worker profiles a loaded plugin registered; a Ticket whose matched rule names one runs it instead of the bundled worker. */
+  /** Worker profiles a loaded plugin registered; a Ticket whose matched rule names one, or whose Trigger one matches, runs it. */
   readonly workers: Pick<WorkerRegistry, 'get'>
   /** The `models` health entry, which reports managed sessions waiting on a model-budget retry. */
   readonly health: HealthEntry
@@ -262,7 +262,7 @@ export class Sessions {
     const ticketId = ticketOfReviewSession(agent.id)
     return ticketId === undefined ? undefined : this.host.store.tickets.get(ticketId)
   }
-  /** The worker profile the Ticket's matched rules named, when the plugin that registered it is loaded. */
+  /** The worker profile the Ticket recorded when it was accepted, when the plugin that registered it is still loaded. */
   private profile(ticket: Ticket | undefined): WorkerProfile | undefined {
     return this.host.workers.get(ticket?.execution?.worker)
   }
