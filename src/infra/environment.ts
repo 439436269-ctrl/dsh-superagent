@@ -50,6 +50,38 @@ const result = /\\.(cmd|bat)$/i.test(argv[0])
   : spawnSync(argv[0], argv.slice(1), { stdio: 'inherit', env })
 process.exit(result.status ?? (result.error ? 1 : 0))
 `
+/**
+ * win32 port: PowerShell runs the `.ps1` of a name before the `.cmd` beside it, so workers whose shell is PowerShell hand
+ * every argument to the real CLI unchanged. The `.cmd` stays for cmd.exe and bash, where cmd.exe ends a command line at
+ * the first newline: a message with several paragraphs would reach the CLI as its first paragraph only, and the rest would
+ * run as separate commands. The PowerShell side restores PATH after the call because a script shares the caller's process.
+ */
+export const windowsPowerShellShim = (name: string): string => `# ${MARKER_TEXT}
+# Continue, so a CLI's diagnostic on stderr is passed on instead of ending this script before its status is read.
+$ErrorActionPreference = 'Continue'
+$config = Get-Content -Raw -LiteralPath (Join-Path $PSScriptRoot '${name}.shim.json') | ConvertFrom-Json
+if ($config.fail) { [Console]::Error.WriteLine([string]$config.fail); exit 1 }
+
+# Strip the shim directory from PATH, as the other shims do, so a wrapper reaching the CLI by name finds the real binary.
+$here = $PSScriptRoot.TrimEnd('\\').ToLowerInvariant()
+$path = $env:PATH
+$entries = @($path -split ';' | Where-Object { $_ -and $_.TrimEnd('\\').ToLowerInvariant() -ne $here })
+
+# Forward every argument unchanged, newlines included; they are what cmd.exe would have split away.
+$target = @($config.argv)
+$rest = @()
+if ($target.Count -gt 1) { $rest = $target[1..($target.Count - 1)] }
+$code = 1
+try {
+  $env:PATH = $entries -join ';'
+  $LASTEXITCODE = $null
+  & $target[0] @rest @args
+  $code = if ($null -ne $LASTEXITCODE) { [int]$LASTEXITCODE } elseif ($?) { 0 } else { 1 }
+} finally {
+  $env:PATH = $path
+}
+exit $code
+`
 const shellQuote = (value: string): string => `'${value.replaceAll("'", "'\\''")}'`
 const gitQuote = (value: string): string => `"${value.replace(/[\\"]/g, char => `\\${char}`)}"`
 export const credentialHelper = (cli: string): string => `!${shellQuote(cli)} auth git-credential`
@@ -140,6 +172,7 @@ export async function writeEnvironment(deployment: Pick<Deployment, 'stateDir' |
     const install = async (name: string, config: { argv?: string[]; fail?: string }): Promise<void> => {
       await raw(`${name}.shim.json`, JSON.stringify({ marker: MARKER_TEXT, ...config }))
       await raw(`${name}.cmd`, ['@echo off', `@REM ${MARKER_TEXT}`, `"${process.execPath}" "%~dp0${SHIM_HELPER}" "%~dp0${name}.shim.json" %*`, ''].join('\r\n'))
+      await raw(`${name}.ps1`, windowsPowerShellShim(name))
     }
     await install('gh', { argv: [github.cli] })
     await install('lark-cli', feishu ? { argv: [feishu.cli] } : { fail: 'lark-cli is unavailable: this installation has no Feishu bot.' })
