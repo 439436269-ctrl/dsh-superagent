@@ -1357,6 +1357,8 @@ it('tells the main Session of each requeue of the same Trigger', async () => {
 
 it('keeps replies and acknowledgements to an IM conversation within the IM limit', async () => {
   const { ticket, trigger, sessionId } = await acceptedTicket()
+  // The host's own completion reply is not the subject here, so the main Session's result is what the limit must refuse.
+  await runtime.settings.save('replies', { ...runtime.store.settings().replies, completion: false }, runtime.store.blockRevision('replies'), 'panel')
   const long = Array.from({ length: IM_WORDS + 1 }, () => 'word').join(' ')
   await runTool(sessionId, 'orchestrator_report', { state: 'ready', summary: 'reviewed' })
   await expect(runTool(runtime.masterId, 'orchestrator_reply', { ticket_id: ticket.id, purpose: 'result', text: long })).rejects.toThrow(`maximum is ${IM_WORDS}`)

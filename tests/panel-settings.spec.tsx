@@ -60,6 +60,19 @@ it('saves the Eval block on the Policy settings and the Executor with its execut
     'settings/executor'])
 })
 
+it('shows the two automatic replies on the Eval settings, both on, and saves them as their own block', async () => {
+  await mount()
+  await click(zh['tab.eval'])
+  await click(find(zh['tab.settings'], '.dt-status-head button'))
+  const switches = () => all('.dt-switch-row').filter(row => row.textContent?.startsWith('自动回复'))
+    .map(row => [row.textContent, row.querySelector('[role="switch"]')?.getAttribute('aria-checked')])
+  expect(switches()).toEqual([[zh.receiptReply, 'true'], [zh.completionReply, 'true']])
+  await click(find(zh.completionReply, '[role="switch"]'))
+  await click(zh.save)
+  expect(server.settings.replies).toEqual({ receipt: true, completion: false })
+  expect(server.requests.filter(request => request.method === 'PUT').map(request => request.path)).toEqual(['settings/replies'])
+})
+
 it('loads configuration history on demand with localized changes, Source field labels and notified Tickets', async () => {
   server.history = { current: 3, policyVersion: 'abcdef1234567890', items: [{ revision: 3, savedAt: '2026-09-22T00:00:00Z',
     source: 'sync', policyVersion: 'abcdef1234567890', policyChanged: true, notified: [{ id: 't1', title: '修复回归' }], block: 'policy',

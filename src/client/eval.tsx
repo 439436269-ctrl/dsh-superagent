@@ -218,10 +218,28 @@ function EvalBlock() {
   </form>
 }
 
+function RepliesBlock() {
+  const { t } = usePanel()
+  const block = useSettings().settings.blocks.replies
+  const draft = useBlockDraft('replies', block.value, block.revision)
+  const value = draft.value
+  const edit = (next: Partial<typeof value>) => draft.edit({ ...value, ...next })
+  return <form className="dt-form dt-block" onSubmit={event => { void draft.submit(event) }}>
+    <Fields disabled={draft.busy}>
+      <h2 className="dt-block-title">{t('repliesSettings')}<InfoTip text={t('repliesIntro')} /></h2>
+      <SwitchRow label={t('receiptReply')} hint={t('receiptReplyHint')} checked={value.receipt} onChange={receipt => edit({ receipt })} />
+      <SwitchRow label={t('completionReply')} hint={t('completionReplyHint')} checked={value.completion}
+        onChange={completion => edit({ completion })} />
+    </Fields>
+    <SaveBar {...draft} onDiscard={draft.discard} />
+  </form>
+}
+
 export function EvalSettings({ version }: { version?: string | undefined }) {
   return <div className="dt-form">
     <PolicyBlock />
     <EvalBlock />
-    <ConfigHistory blocks={['policy', 'eval']} versions {...version ? { focus: version } : {}} />
+    <RepliesBlock />
+    <ConfigHistory blocks={['policy', 'eval', 'replies']} versions {...version ? { focus: version } : {}} />
   </div>
 }
