@@ -110,6 +110,9 @@ it('adds a profile\'s known domain tools to the bundled work tools, and nothing 
   expect(names).not.toContain('orchestrator_report')
   // A profile may add a tool, never remove one.
   expect(workToolNames({ ...profile, tools: [] }, () => true)).toContain('read')
+  // A profile whose preset lacks a work tool only gets what the preset actually registers: the allow list cannot invent it.
+  expect(workToolNames(undefined, name => name === 'read')).toEqual(['read'])
+  expect(workToolNames({ ...textile, tools: ['chaosheng_lookup'] }, name => name === 'chaosheng_lookup')).toEqual(['chaosheng_lookup'])
 })
 
 let h: Host
