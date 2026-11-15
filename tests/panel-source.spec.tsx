@@ -93,6 +93,25 @@ it('renders each Source\'s settings from its kind\'s fields and saves one Source
   expect(server.revisions['source:github']).toBe(6)
 })
 
+it('lists the extra repositories a GitHub Source watches and saves them as bare names', async () => {
+  server.settings.sources.github = { ...server.settings.sources.github!,
+    config: { ...server.settings.sources.github!.config, repositories: ['acme/notes'] } }
+  await mount()
+  await click(zh['tab.source'])
+  await click(find(zh['tab.settings'], '.dt-status-head button'))
+  const github = all('.dt-card')[1]!
+  const rows = () => [...github.querySelectorAll('.dt-rows-item')]
+  // A repository stored as a bare name still shows in the list; before, the row rendered as a blank input.
+  expect(rows()[0]!.querySelector('.dt-row-label')?.textContent).toBe('acme/notes')
+  await click([...github.querySelectorAll('button')].find(button => button.textContent === '添加')!)
+  await type(rows()[1]!.querySelector<HTMLInputElement>('input[aria-label="仓库"]')!, 'acme/other')
+  await act(async () => { github.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true })) }); await settle()
+  // The panel round-trips the string list the schema stores, so the fake server's own kind schema accepts the save.
+  expect(server.requests.find(request => request.path === 'settings/source:github')).toMatchObject({ method: 'PUT',
+    body: { revision: 0, value: { enabled: true, config: { repositories: ['acme/notes', 'acme/other'] } } } })
+  expect(server.settings.sources.github!.config.repositories).toEqual(['acme/notes', 'acme/other'])
+})
+
 it('shows the account each CLI signs in as, and keeps a saved CLI on screen while dsh-superagent restarts', async () => {
   await mount()
   await click(tab(zh['tab.settings']))
