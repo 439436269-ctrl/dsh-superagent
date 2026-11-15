@@ -64,7 +64,7 @@ A plugin may register worker profiles on the `orchestrator` service (`ctx.orches
 
 The Ticket records the profile id when it is accepted, so a later rule edit or a plugin reload does not change an open Ticket's worker. That Ticket's Session is created with the profile's agent preset, may use the profile's known tools beside the bundled work tools, and reads the profile's instructions after the team's sections and the Mandate's limits. A profile may also mark its Tickets `workless`, giving them an empty folder and skipping the prepare command, as a rule's `workspace: false` does. A profile can add a tool but cannot remove a work tool or the report, reply and hand-back tools, which the host still enforces.
 
-When a rule names a profile no loaded plugin registers, or a Ticket's Source no loaded profile claims, the Ticket runs the bundled worker preset with no additional tools or instructions; an open Ticket starts using the profile again once a plugin registers it. A profile whose preset is not installed fails that Session's creation, so install the preset before enabling the rule.
+When a rule names a profile no loaded plugin registers, the Ticket still records the id and starts using the profile once a plugin registers it. A Ticket whose Source no loaded profile claims runs the bundled worker preset with no additional tools or instructions; a profile installed later applies only to Tickets accepted afterwards. A profile whose preset is not installed fails that Session's creation, so install the preset before enabling the rule.
 
 ### Concurrency
 
