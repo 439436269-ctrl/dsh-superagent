@@ -38,20 +38,20 @@ if (-not (Test-Path $events)) { Say 'skip: no event directory'; exit 0 }
 $logs = Get-ChildItem $events -Directory | ForEach-Object {
   $file = Join-Path $_.FullName 'bus.log'
   if (Test-Path $file) { [pscustomobject]@{ App = $_.Name; File = $file; Touched = (Get-Item $file).LastWriteTime } }
-} | Sort-Object Touched -Descending
+} | Where-Object { $_.Touched -gt (Get-Date).AddHours(-24) } | Sort-Object Touched -Descending
 if (-not $logs) { Say 'skip: no bus.log'; exit 0 }
 
 $connected = $null; $broken = $null; $app = $null
 foreach ($entry in $logs) {
   $lines = Get-Content $entry.File -Tail 200
   $lastConnected = ($lines | Select-String -Pattern 'connected to wss://' | Select-Object -Last 1)
-  $lastBroken = ($lines | Select-String -Pattern 'connect failed|disconnected to wss://|storage.*close|unexpected EOF' | Select-Object -Last 1)
+  $lastBroken = ($lines | Select-String -Pattern 'connect failed|disconnected to wss://|Consumer disconnected|Bus exited|connection is closed|unexpected EOF' | Select-Object -Last 1)
   if (-not $lastConnected) { continue }
   $app = $entry.App; $connected = $lastConnected.LineNumber; $broken = if ($lastBroken) { $lastBroken.LineNumber } else { 0 }
   break
 }
 if (-not $app) { Say 'skip: no bus log shows a successful connection yet'; exit 0 }
-if ($broken -le $connected) { Say "ok: $app is connected (last connected after the last failure)"; exit 0 }
+if ($broken -le $connected) { Say "ok: $app is connected (log $app, last connect after the last failure)"; exit 0 }
 
 # Killing the consumer only helps while the host resolves Feishu: a restart during a DNS outage just fails again, so wait for the next run.
 $dns = Resolve-DnsName open.feishu.cn -Type A -ErrorAction SilentlyContinue | Where-Object { $_.IPAddress } | Select-Object -First 1
