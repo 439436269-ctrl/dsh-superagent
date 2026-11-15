@@ -50,7 +50,7 @@ export const githubKind: SourceKind<GithubConfig> = {
       hint: { zh: '写作 owner/name。这个来源接收这个仓库的通知和讨论；保存时检查智能体账号能否推送到它，然后重启 dsh-superagent。', en: 'Written owner/name. This Source receives the repository\'s notifications and discussion; saving checks that the agent account can push to it, then restarts dsh-superagent.' } },
     // A deployment may serve several repositories; the single field above stays the default, which is all a
     // single-repository deployment ever sets (docs/013-multi-repository.md).
-    { key: 'repositories', type: 'rows', label: { zh: '同时监听的仓库', en: 'Also watched repositories' },
+    { key: 'repositories', type: 'rows', scalar: true, label: { zh: '同时监听的仓库', en: 'Also watched repositories' },
       hint: { zh: '额外的 owner/name，可为空。留空时只监听上面那个仓库。', en: 'Extra owner/name entries; leave empty to watch only the repository above.' },
       columns: [{ key: 'id', type: 'text', label: { zh: '仓库', en: 'Repository' }, pattern: '[A-Za-z0-9_.\-]+/[A-Za-z0-9_.\-]+' }] },
     { key: 'cli', type: 'text', label: { zh: '智能体的 GitHub CLI', en: 'Agent GitHub CLI' },

@@ -178,10 +178,14 @@ function RowsField({ field, value, saved, onChange, labels, refreshLabels }: {
     } catch (failure) { notify(t('labelsFailed', { error: errorText(failure) })) }
   })
   const label = localized(t, field.label), hint = localized(t, field.hint)
-  const rows = Array.isArray(value) ? value as Row[] : []
-  const set = (index: number, row: Row) => onChange(rows.map((item, position) => position === index ? row : item))
   const key = field.columns[0]!
-  const savedKeys = new Set((Array.isArray(saved) ? saved as Row[] : []).map(row => row[key.key]))
+  // A `scalar` list stores one bare value per row (GitHub's extra repositories), not a record keyed by the first column.
+  const rowsOf = (input: unknown): Row[] => (Array.isArray(input) ? input : []).map(item =>
+    typeof item === 'string' ? { [key.key]: item } : item as Row)
+  const stored = (next: Row[]): unknown => field.scalar ? next.map(row => row[key.key] ?? '') : next
+  const rows = rowsOf(value)
+  const set = (index: number, row: Row) => onChange(stored(rows.map((item, position) => position === index ? row : item)))
+  const savedKeys = new Set(rowsOf(saved).map(row => row[key.key]))
   const choose = key.type === 'text' && key.choose && Object.keys(labels).length ? localized(t, key.choose) : ''
   // Exclude options already selected in another row.
   const choices = (id: string) => Object.entries(labels).filter(([option]) => option === id
@@ -220,8 +224,8 @@ function RowsField({ field, value, saved, onChange, labels, refreshLabels }: {
         {key.type === 'text' && key.refresh && refreshLabels && <Button variant="ghost" size="sm" className={refresh.busy ? 'dt-btn-busy'
           : undefined} icon={<Icon name="refresh" />}
           disabled={refresh.busy} aria-busy={refresh.busy} onClick={() => { void refresh.run() }}>{localized(t, key.refresh)}</Button>}
-        <Button variant="ghost" size="sm" icon={<Icon name="plus" />} onClick={() => { setOpen(true); onChange([...rows,
-          blank]) }}>{t('addRow')}</Button>
+        <Button variant="ghost" size="sm" icon={<Icon name="plus" />} onClick={() => { setOpen(true); onChange(stored([...rows,
+          blank])) }}>{t('addRow')}</Button>
       </span>
     </div>
     {rows.length > ROWS_SHOWN && <button type="button" className="dt-textlink dt-rows-summary" aria-expanded={open}
@@ -233,7 +237,7 @@ function RowsField({ field, value, saved, onChange, labels, refreshLabels }: {
       {field.columns.map(column => cell(row, index, column))}
       <Button variant="ghost" size="sm" icon={<Icon name="trash" />} aria-label={t('removeRow', { name: labels[row[key.key] ?? '']
         || row[key.key] || label })}
-        onClick={() => onChange(rows.filter((_, position) => position !== index))} />
+        onClick={() => onChange(stored(rows.filter((_, position) => position !== index)))} />
     </li>)}</ul>}
   </div>
 }
