@@ -19,6 +19,7 @@ import { bundledSkills } from './skill-files.ts'
 import { composeReviewerPrompt, SKILL_PREFIX, type PromptVersion, type Prompts } from './prompts.ts'
 import type { Store } from './store.ts'
 import { KV } from '../kv.ts'
+import type { WorkerProfile, WorkerRegistry } from '../workers.ts'
 import type { RegisterTool, Tool } from './tools/tool.ts'
 
 /** Host dependencies used by `Sessions`. */
@@ -28,6 +29,8 @@ export interface SessionsHost {
   readonly store: Pick<Store, 'tickets' | 'settings' | 'get' | 'set' | 'keys'>
   readonly prompts: Pick<Prompts, 'current' | 'version' | 'compose' | 'skills'>
   readonly effects: Pick<Effects, 'enqueue' | 'handle' | 'idle' | 'pending'>
+  /** Worker profiles a loaded plugin registered; a Ticket whose matched rule names one, or whose Trigger one matches, runs it. */
+  readonly workers: Pick<WorkerRegistry, 'get'>
   /** The `models` health entry, which reports managed sessions waiting on a model-budget retry. */
   readonly health: HealthEntry
   readonly masterId: string
@@ -64,6 +67,10 @@ declare module '@deepseek-ai/cordis' {
  */
 const WORK_TOOLS = ['read', 'write', 'edit', 'read_image', 'glob', 'grep', 'bash', 'pwsh', 'job_output', 'job_list', 'job_kill', 'web_search',
   'web_fetch', 'skill', 'todo_write', 'subagent', 'list_subagent_models', 'send_message', 'list_agents', 'interrupt_agent']
+/** The tools an Executor Session may use: the bundled work tools plus the known domain tools of its worker profile. */
+export function workToolNames(profile: WorkerProfile | undefined, known: (name: string) => boolean): string[] {
+  return [...new Set([...WORK_TOOLS, ...(profile?.tools ?? [])])].filter(known)
+}
 /**
  * What a reviewer Session works with: reading files, searching them, a shell for `git diff`/`gh pr diff`, its jobs,
  * skills, and this ticket's read resources. It has no write, edit, subagent, todo or report tool, so a review cannot
@@ -135,8 +142,9 @@ export class Sessions {
     ctx.inject(['agentPresets'], child => {
       child.on('agent-preset/selected', (sessionId, preset) => {
         const ticketId = ticketOfSession(sessionId), reviewId = ticketOfReviewSession(sessionId), agent = ctx.agents.get(sessionId as SessionId)
+        const ticket = ticketId === undefined ? undefined : this.host.store.tickets.get(ticketId)
         const ours = sessionId === this.host.masterId ? ROUTER_PRESET
-          : ticketId && this.host.store.tickets.get(ticketId) ? WORKER_PRESET
+          : ticket ? this.profile(ticket)?.preset ?? WORKER_PRESET
           : reviewId && this.host.store.tickets.get(reviewId) ? REVIEWER_PRESET : undefined
         if (!ours || preset === ours || !agent) return
         const presets = child.get('agentPresets') as { select(agent: Agent, preset: string): Promise<string> }
@@ -150,18 +158,20 @@ export class Sessions {
   /** Resolves or creates session `id` in workspace `cwd`, initializes its role model, decorates it with prompts/skills/tools, sets `danger-full-access` permissions, and renames it to `title`. */
   async ensure(id: string, cwd: string, title: string, role: SessionRole): Promise<Agent> {
     const ctx = this.ctx
+    const ticket = role === 'orchestrator' ? undefined : this.host.store.tickets.get((role === 'worker' ? ticketOfSession(id)
+      : ticketOfReviewSession(id)) ?? '')
     let result = await ctx.sessionController.resolveAgent(id as SessionId)
     if ('error' in result && result.error.code === 'session/not-found') {
       const workspace = await ctx.workspaceRegistry.create(cwd)
-      // A Session keeps the preset it was created with, one of the bundle's own (cordis.patch.yml).
-      const agentPreset = role === 'worker' ? WORKER_PRESET : role === 'reviewer' ? REVIEWER_PRESET : ROUTER_PRESET
+      // A Session keeps the preset it was created with: the worker profile the Ticket's matched rule names, else one of the
+      // bundle's own (cordis.patch.yml).
+      const agentPreset = role === 'worker' ? this.profile(ticket)?.preset ?? WORKER_PRESET
+        : role === 'reviewer' ? REVIEWER_PRESET : ROUTER_PRESET
       await ctx.sessionController.create({ sessionId: id as SessionId, workspaceId: workspace.id, agentPreset })
       result = await ctx.sessionController.resolveAgent(id as SessionId)
     }
     if ('error' in result) throw result.error
     const settings = this.host.store.settings()
-    const ticket = role === 'orchestrator' ? undefined : this.host.store.tickets.get((role === 'worker' ? ticketOfSession(id)
-      : ticketOfReviewSession(id)) ?? '')
     // A ticket that asked for the slow lane runs on the local model; a reviewer has its own model when one is set.
     const model = role === 'orchestrator' ? settings.eval.model
       : role === 'reviewer' ? settings.executor.reviewerModel ?? settings.executor.model
@@ -252,6 +262,10 @@ export class Sessions {
     const ticketId = ticketOfReviewSession(agent.id)
     return ticketId === undefined ? undefined : this.host.store.tickets.get(ticketId)
   }
+  /** The worker profile the Ticket recorded when it was accepted, when the plugin that registered it is still loaded. */
+  private profile(ticket: Ticket | undefined): WorkerProfile | undefined {
+    return this.host.workers.get(ticket?.execution?.worker)
+  }
   private async decorate(agent: Agent): Promise<void> {
     if (this.bindings.has(agent)) return
     const host = this.host
@@ -273,7 +287,10 @@ export class Sessions {
       // A reviewer reads its own brief and the team's scope, not the worker's delivery, reply or handoff rules.
       const composed = role === 'reviewer' ? composeReviewerPrompt(version.config, current ? host.environment(current) : undefined)
         : host.prompts.compose(version.config, role, current ? host.environment(current) : undefined)
-      return `[dsh-superagent prompt revision ${version.revision}]\n${composed}\n${role === 'worker' && current ? mandateInstructions(current.mandate) : ''}`
+      // A worker profile adds its own instructions after the team's sections and the Ticket's Mandate.
+      const profile = role === 'worker' ? this.profile(current) : undefined
+      const extra = profile?.instructions?.trim() ? `\n\n## Worker profile\n${profile.instructions.trim()}` : ''
+      return `[dsh-superagent prompt revision ${version.revision}]\n${composed}\n${role === 'worker' && current ? mandateInstructions(current.mandate) : ''}${extra}`
     }, ...(master ? { complete: true } : {}) }))
     // A recreated skill scope (e.g. after the skills service restarts) starts empty, so reset `binding.skills` before rebinding.
     const skillScope = agent.ctx.inject(['skills'], scope => {
@@ -321,11 +338,13 @@ export class Sessions {
    * ended. A failed or blocked worker keeps its tools, so a person may continue it in its Session; only automated input waits
    * (see the executor). Read inherited tools through the parent scope, which includes the preset's tools. The global view
    * misses preset tools; the agent's own view also includes local tools such as subagent, which restrict refuses to name.
+   * A worker profile may add domain tools of its own; the bundled work tools cannot be taken away.
    */
   private workOnly(agent: Agent, ticketId: string): (() => void)[] {
     const store = this.host.store
     const parent = scopeParentOf(agent)
-    const allow = WORK_TOOLS.filter(name => agent.ctx.tools.get(name, parent))
+    const ticket = store.tickets.get(ticketId)
+    const allow = workToolNames(this.profile(ticket), name => agent.ctx.tools.get(name, parent) !== undefined)
     return [agent.ctx.tools.restrict({ allow }), agent.ctx.tools.guard(() => {
       const current = store.tickets.get(ticketId)
       return !current || !liveTicket(current) ? 'Ticket ended; new work needs a new authorized ticket' : undefined

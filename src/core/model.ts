@@ -325,6 +325,12 @@ export interface Execution {
   assignment: string
   /** Whether the Ticket works without a code directory: its directory is a plain empty folder and the prepare command is skipped. */
   workless?: boolean
+  /**
+   * The worker profile its matched rules name, recorded when it is accepted so a later rule edit or a restarted plugin does
+   * not change the worker of an open Ticket. Absent on Tickets accepted before profiles existed, and on those whose rules
+   * name none: they run under the bundled worker preset.
+   */
+  worker?: string
 }
 
 /** Whether a ticket is open: it has not ended. */

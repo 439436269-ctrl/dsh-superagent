@@ -18,6 +18,7 @@ import type { Sessions } from '../app/sessions.ts'
 import { WorktreeNameSchema } from '../app/assessment.ts'
 import { resultRelay } from '../app/notices.ts'
 import type { HealthEntry } from '../infra/health.ts'
+import type { WorkerProfile, WorkerRegistry } from '../workers.ts'
 import { cancelled, collectJob, killJobs, runningJobs, stopBackground, stopSubagents, until, untilQuiet } from './background.ts'
 
 const now = (): string => new Date().toISOString()
@@ -72,6 +73,8 @@ export interface ExecutorHost {
   readonly lifetime: AbortSignal
   /** Session manager for worker sessions and for relaying worker reports to the main Session. */
   readonly sessions: Pick<Sessions, 'ensure' | 'prompt' | 'promptedId' | 'relay' | 'holds'>
+  /** Worker profiles plugins registered; one may claim the Ticket's Trigger when no matched rule names another. */
+  readonly workers: Pick<WorkerRegistry, 'get' | 'match'>
   closing(): boolean
   /** Whether processing is paused, which holds launches and input deliveries. */
   paused(): boolean
@@ -94,9 +97,24 @@ export function mandateInstructions(mandate: Pick<Mandate, 'strength'>): string 
     + 'internal to one module within the accepted rule scope. If it requires public-interface or behavior changes, new interaction, product '
     + 'decisions or clarification, stop and report dropped; do not expand scope.' : ''
 }
+/**
+ * Resolves the worker profile a Ticket runs under: the profile named by the first matched rule, in Policy order, that names
+ * one. A matched rule suppresses the Trigger claim, so a policy that routed the Ticket keeps it: only a Ticket with no
+ * matched rule runs the profile whose `match` accepts its Trigger. Only a profile registered when the Ticket is accepted is
+ * selected, so a plugin loaded later cannot apply its preset to an existing Session halfway.
+ */
+export function workerSelection(ticket: Ticket, settings: Settings, workers: Pick<WorkerRegistry, 'get' | 'match'>,
+  trigger: Trigger | undefined): Pick<WorkerProfile, 'id' | 'workless'> | undefined {
+  const matched = settings.policy.rules.filter(rule => ticket.mandate.basis.rules?.includes(rule.id))
+  const named = matched.find(rule => rule.worker)?.worker
+  const profile = named !== undefined ? workers.get(named) : matched.length ? undefined : workers.match(trigger)
+  if (!profile) return undefined
+  return { id: profile.id, ...(profile.workless ? { workless: true } : {}) }
+}
+
 /** Builds a newly accepted ticket's Execution metadata: its worktree name, workspace directory, assignment text, and whether it needs a code directory. */
 export function ticketExecution(ticket: Ticket, outcome: Extract<AssessmentOutcome, { kind: 'accept' }>, settings: Settings,
-  stateDir: string, defaultRepository?: string): Execution {
+  stateDir: string, defaultRepository?: string, workerProfile?: Pick<WorkerProfile, 'id' | 'workless'>): Execution {
   const name = ticketWorktreeName(outcome.name ?? '', ticket.id)
   const source = ticket.origin.triggerId
   const note = outcome.note ? `\nRouting note (not the source request): ${outcome.note}` : ''
@@ -113,9 +131,14 @@ export function ticketExecution(ticket: Ticket, outcome: Extract<AssessmentOutco
   const root = executionRoot(settings, stateDir)
   // Every ticket's worktree sits in the repository's own `worktrees` folder, so a repository adds one folder, not one per ticket.
   const home = repositoryDirectory(settings, stateDir, ticket.repository ?? defaultRepository)
-  // A rule can say its tickets need no code directory: such a ticket gets an empty folder beside the worktrees, and the prepare command does not run.
-  const workless = matched.some(rule => rule.workspace === false)
-  return { name, directory: join(home, workless ? 'answers' : 'worktrees', name), assignment, ...workless ? { workless } : {} }
+  // A rule, or the selected worker profile, can say its tickets need no code directory: such a ticket gets an empty folder
+  // beside the worktrees, and the prepare command does not run.
+  const workless = matched.some(rule => rule.workspace === false) || workerProfile?.workless === true
+  // The caller resolves the profile once, so the worker and its workless setting can never come from different profiles.
+  // Recording the id here keeps an open Ticket's worker stable when the rule or the plugin changes later. A profile the
+  // plugin no longer registers runs the bundled worker.
+  const worker = workerProfile?.id
+  return { name, directory: join(home, workless ? 'answers' : 'worktrees', name), assignment, ...workless ? { workless } : {}, ...worker ? { worker } : {} }
 }
 /** Character limits for inline assignment and trigger text in worker messages; longer text is read via its resource. */
 const ASSIGNMENT_CHARS = 1500, TRIGGER_CHARS = 600
@@ -255,7 +278,11 @@ export class DshExecutor implements Executor {
     const settings = this.host.store.settings()
     // The default repository is the one the GitHub Source names; a ticket working elsewhere gets its own subtree.
     const configured = settings.sources.github?.config as { repository?: string } | undefined
-    const prepared = { ...ticket, execution: ticketExecution(ticket, outcome, settings, this.host.machine.stateDir, configured?.repository || undefined) }
+    // A worker profile may be named by a matched rule or accept the Ticket's Trigger; it is resolved once, while accepting,
+    // so its preset, workless folder and recorded id all come from the same profile.
+    const selection = workerSelection(ticket, settings, this.host.workers, sourceTrigger(this.host, ticket))
+    const prepared = { ...ticket, execution: ticketExecution(ticket, outcome, settings, this.host.machine.stateDir,
+      configured?.repository || undefined, selection) }
     // A request that names the marker needs nobody in a hurry, so its worker runs on the slower local model.
     const marker = settings.executor.slowMarker
     const slow = Boolean(settings.executor.slow) && marker !== ''
