@@ -2,7 +2,7 @@
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 import { TICKET_STATES } from '../src/app/cards.ts'
 import { builtInBase, builtInParts, defaultPrompts } from '../src/app/prompts.ts'
-import { UserError } from '../src/core/index.ts'
+import { UserError, key } from '../src/core/index.ts'
 import { KV } from '../src/kv.ts'
 import { RESOURCES } from '../src/app/resources.ts'
 import { CliError, Commands } from '../src/infra/commands.ts'
@@ -254,6 +254,9 @@ it('ignores a proactive candidate from its card beside other decisions, marked s
 
 it('returns where a reply stands: sent, or dropped when its conversation can no longer receive it', async () => {
   const { ticket, sessionId } = await h.acceptedTicket(feishu('1', '@bot 修一下回归'))
+  // Without the host's own completion reply, the main Session's result is what goes out.
+  const replies = h.runtime.store.settings().replies
+  await h.runtime.settings.save('replies', { ...replies, completion: false }, h.runtime.store.blockRevision('replies'), 'panel')
   await h.runTool(sessionId, 'orchestrator_report', { state: 'ready', summary: 'Done.' })
   const reply = (text: string) => h.runTool(h.runtime.masterId, 'orchestrator_reply', { ticket_id: ticket.id, purpose: 'result', text })
   expect(await reply('修好了。')).toEqual({ status: 'sent' })
@@ -261,8 +264,20 @@ it('returns where a reply stands: sent, or dropped when its conversation can no 
   expect(await reply('修好了，请看 PR。')).toEqual({ status: 'dropped' })
 })
 
-it('checks an acknowledgement against the IM word limit, not a character count', async () => {
-  const trigger = feishu('1', '@bot 修一下回归')
+it('posts the report\'s completion message as the ticket result, refusing one over the IM word limit', async () => {
+  const { ticket, sessionId } = await h.acceptedTicket(feishu('1', '@bot 修一下回归'))
+  await expect(h.runTool(sessionId, 'orchestrator_report', { state: 'ready', summary: 'Done.', message: words(IM_WORDS + 1) }))
+    .rejects.toThrow(`maximum is ${IM_WORDS}`)
+  await h.runTool(sessionId, 'orchestrator_report', { state: 'ready', summary: 'Done.', message: '修好了。' })
+  await h.runtime.idle()
+  const report = h.runtime.store.tickets.get(ticket.id)!.assignments.at(-1)!.report!
+  expect(h.runtime.store.replyStatus(key('result', ticket.id, report.at))).toBe('sent')
+  // The main Session's own result reuses the host's message instead of becoming a second message.
+  expect(await h.runTool(h.runtime.masterId, 'orchestrator_reply', { ticket_id: ticket.id, purpose: 'result', text: '修好了。' }))
+    .toEqual({ status: 'sent' })
+})
+
+it('checks an acknowledgement against the IM word limit, not a character count', async () => {  const trigger = feishu('1', '@bot 修一下回归')
   h.runtime.receive(trigger); await h.runtime.idle()
   const accept = (acknowledgement: string) => h.route({ kind: 'accept', trigger_id: trigger.id, title: 'Fix', worktree_name: 'fix-regression', acknowledgement })
   await expect(accept(words(IM_WORDS + 1))).rejects.toThrow(`at most ${IM_WORDS} words`)

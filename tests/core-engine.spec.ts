@@ -28,6 +28,7 @@ function harness(policyOverrides: Partial<Policy> = {}, { emit, prepareTicket }:
   let version = 'v1', paused = false
   const policy: Policy = {
     get version() { return version }, get paused() { return paused }, evalTimeoutMs: 60_000,
+    replies: { receipt: true, completion: true },
     gate: (t, thread) => !t.human ? { admissible: false, reason: 'not human' } : t.actor.id === 'alice' ? { admissible: true, strength: 'explicit', basis: { via: 'listed' } } : thread.subscriptions.length ? { admissible: true, strength: 'inferred', basis: { via: 'followup' } } : { admissible: false, reason: 'not a member' },
     revalidate: () => version !== 'revoked',
     admitsInferred: rules => rules.length > 0,
@@ -1061,6 +1062,54 @@ describe('replies', () => {
     expect(h.engine.reply({ purpose: 'result', ticketId, text: 'Done' })).toMatchObject({ status: 'pending' })
     expect(h.outbox.at(-1)!.channel).toEqual(trigger('1').channel)
   })
+  it('sends the default receipt for an accepted request whose assessment wrote none, and nothing when receipts are off', () => {
+    const h = harness()
+    h.engine.receive(trigger('1', { addressed: 'direct' })); h.pump()
+    h.decide(h.requests.at(-1)!, { kind: 'accept', title: 'Fix the panel', scope: 'small', reason: 'requested' })
+    h.settle()
+    expect(h.outbox).toEqual([expect.objectContaining({ id: key('ack', '1'), channel: trigger('1').channel,
+      text: '收到：Fix the panel', kind: 'acknowledgement' })])
+    const off = harness({ replies: { receipt: false, completion: true } })
+    off.engine.receive(trigger('1', { addressed: 'direct' })); off.pump()
+    off.decide(off.requests.at(-1)!, { kind: 'accept', title: 'Fix', scope: 'small', reason: 'requested', acknowledgement: 'ok' })
+    off.settle()
+    expect(off.outbox).toEqual([])
+  })
+  it('acknowledges a message routed onto a ticket where that person wrote, and completes there too', () => {
+    const h = harness()
+    h.engine.dispatch({ repository: 'acme/widgets', request: 'fix it', actor: 'alice' })
+    h.pump()
+    const ticketId = h.decide(h.requests.at(-1)!, { kind: 'accept', title: 'Fix it', scope: 'small', reason: 'requested' }).ticketId!
+    h.settle()
+    // The dispatcher's request has no Channel of its own; the person's message supplies the conversation.
+    h.engine.receive(trigger('2', { addressed: 'direct' }))
+    h.engine.attach(ticketId, '2')
+    expect(h.outbox.at(-1)).toMatchObject({ id: key('ack', '2'), channel: trigger('2').channel, text: '收到：Fix it', kind: 'acknowledgement' })
+    h.engine.report(ticketId, { state: 'ready', summary: 'Done' })
+    expect(h.outbox.at(-1)).toMatchObject({ channel: trigger('2').channel, text: '已完成：Fix it', kind: 'reply' })
+  })
+  it('sends the worker\'s completion message for a ready report and lets a later result reply reuse it', () => {
+    const h = harness()
+    const ticketId = accepted(h).ticketId!
+    h.engine.report(ticketId, { state: 'ready', summary: 'Done', message: 'Fixed: https://example.test/pull/1' })
+    expect(h.outbox.at(-1)).toMatchObject({ channel: trigger('1').channel, text: 'Fixed: https://example.test/pull/1', kind: 'reply' })
+    expect(h.engine.reply({ purpose: 'result', ticketId, text: 'Done' })).toMatchObject({ reused: true,
+      id: key('result', ticketId, h.repo.tickets.get(ticketId)!.assignments.at(-1)!.report!.at) })
+    expect(h.outbox.filter(message => message.kind === 'reply')).toHaveLength(1)
+    // Dropped work answers too, with the report's own message when it has one.
+    const dropped = accepted(h, '3', 't3').ticketId!
+    h.engine.report(dropped, { state: 'dropped', summary: 'Not a defect', message: 'Not reproduced.' })
+    expect(h.outbox.at(-1)).toMatchObject({ channel: trigger('3').channel, text: 'Not reproduced.' })
+  })
+  it('leaves both replies to the prompts when the deployment turns them off', () => {
+    const h = harness({ replies: { receipt: false, completion: false } })
+    const ticketId = accepted(h).ticketId!
+    h.engine.report(ticketId, { state: 'ready', summary: 'Done', message: 'Fixed.' })
+    expect(h.outbox).toEqual([])
+    // The main Session can still send the result itself, as it did before the switches existed.
+    expect(h.engine.reply({ purpose: 'result', ticketId, text: 'Done' })).toMatchObject({ reused: false })
+    expect(h.outbox.at(-1)).toMatchObject({ text: 'Done' })
+  })
 })
 describe('ticket commands', () => {
   it('ends a ticket by the same rule on a close and on a ready report: once no PR it opened is open, as the latest of them ended', () => {
@@ -1289,7 +1338,8 @@ describe('gaps', () => {
     expect(() => h.engine.retryTicket(ticketId)).toThrow(new UserError('notRetryable'))
   })
   it('answers a question once, sends a result only for finished work, and the same result once', () => {
-    const h = harness()
+    // The host's own completion reply is what this test leaves out, so the main Session's result path is the one under test.
+    const h = harness({ replies: { receipt: true, completion: false } })
     const ticketId = accepted(h).ticketId!
     h.tick(1); h.engine.receive(trigger('2')); h.settle()
     h.engine.report(ticketId, { state: 'progress', summary: 'It reads the config.', answers: '2' })

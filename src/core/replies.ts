@@ -1,7 +1,7 @@
 /** The Engine's messages to Channels, each by the rule that allows it. */
 import { key } from './ids.ts'
 import { UserError } from './errors.ts'
-import { latestAssignment, liveTicket, ticketOutcome } from './model.ts'
+import { latestAssignment, latestReport, liveTicket, ticketOutcome } from './model.ts'
 import type { ChannelRef, Ticket, Trigger } from './model.ts'
 import type { ReplyStatus } from './ports.ts'
 import { EnginePart } from './part.ts'
@@ -17,11 +17,20 @@ export type ReplyRequest =
 /** A queued message: its id, whether it went out, and whether an earlier request had queued it already. */
 export interface Reply { id: string; status: ReplyStatus; reused: boolean }
 
+/** The host's own wording when a Session's is missing: the reply still arrives, in the deployment's operating language. */
+const RECEIPT = '收到'
+const COMPLETE = '已完成'
+const ENDED = '已结束'
+/** How much of a title a host-written reply keeps, so the IM word limit has room beside it. */
+const TITLE_CHARS = 80
+export const shortTitle = (title: string): string => title.length > TITLE_CHARS ? `${title.slice(0, TITLE_CHARS).trimEnd()}…` : title
+
 /**
  * Replies writes the Engine's messages to Channels through the Outbox port: an acknowledgement, the answer to a person's
  * question, a ticket's result, and its question for a person, each only when its rule allows it, under a deterministic id
  * that keeps it from going out twice (idempotent). The Engine routes `reply` here; Tickets asks it for the acknowledgement
- * an accept carries, and Assignments asks it to withdraw a question a report replaced.
+ * an accept carries, Assignments asks it for the result a ready report earns, and both ask it to withdraw a question a
+ * report replaced.
  */
 export class Replies extends EnginePart {
   /**
@@ -37,11 +46,27 @@ export class Replies extends EnginePart {
     return request.purpose === 'acknowledgement' ? this.acknowledge(request) : this.answer(request)
   }
   /**
-   * Queue the acknowledgement an accept carries where the message that started the ticket was written, if it has a Channel
-   * and a person wrote it.
+   * Queue the acknowledgement a person's request receives when the host sends receipts itself: `text` (an assessment's own
+   * sentence, in the source language) when there is one, else a short default built from the ticket's title. Messages not
+   * addressed to the agent get no default, so proactive work does not acknowledge unrelated chatter.
    */
-  acknowledgeAccepted(ticketId: string, trigger: Trigger, text: string): void {
-    if (trigger.channel && trigger.human) this.options.outbox.send({ id: key('ack', trigger.id), channel: trigger.channel, text, kind: 'acknowledgement', ticketId })
+  receipt(ticket: Ticket, trigger: Trigger, text?: string): void {
+    if (!this.policy().replies.receipt || !trigger.human || !trigger.channel) return
+    const message = text?.trim() || (trigger.addressed ? `${RECEIPT}：${shortTitle(ticket.title)}` : '')
+    if (!message) return
+    this.options.outbox.send({ id: key('ack', trigger.id), channel: trigger.channel, text: message, kind: 'acknowledgement', ticketId: ticket.id })
+  }
+  /**
+   * Queue the host's completion reply for a ready or dropped report when the host sends completion replies itself: the
+   * worker's own `message` when it wrote one, else a short default. One message per report, keyed by its time, so a resumed
+   * ticket's later result is its own message. A ticket with no conversation the agent reached gets none.
+   */
+  complete(ticket: Ticket, state: 'ready' | 'dropped', message: string | undefined, at: string): void {
+    if (!this.policy().replies.completion) return
+    const channel = this.sourceChannel(ticket)
+    if (!channel) return
+    const text = message?.trim() || `${state === 'dropped' ? ENDED : COMPLETE}：${shortTitle(ticket.title)}`
+    this.options.outbox.send({ id: key('result', ticket.id, at), channel, text, kind: 'reply', ticketId: ticket.id })
   }
   /** Withdraw a ticket's question for a person from the outbox, unless it went out already. */
   withdrawAttention(attentionId: string): void { this.options.outbox.withdraw(key('attention-reply', attentionId)) }
@@ -71,6 +96,9 @@ export class Replies extends EnginePart {
       const reported = !!ticket && liveTicket(ticket) && latestAssignment(ticket)?.report?.state === 'ready'
       const ready = outcome === 'merged' || outcome === 'completed' || outcome === 'dropped' || reported
       if (!ticket || !ready) throw new UserError('notReady')
+      // The host's completion reply for the latest report is this ticket's result; a Session's later text is not a second message.
+      const automatic = this.completed(ticket)
+      if (automatic) return { id: automatic, status: this.options.outbox.status(automatic) ?? 'pending', reused: true }
     }
     const attention = request.purpose === 'attention' ? ticket?.attention : undefined
     // Attention replies must match the ticket's currently open question text.
@@ -90,6 +118,24 @@ export class Replies extends EnginePart {
     }
     return { id, status: this.options.outbox.status(id) ?? 'pending', reused: existing !== undefined }
   }
-  /** The conversation a ticket started in: its origin Trigger's Channel, else its first Channel. */
-  private sourceChannel(ticket: Ticket): ChannelRef | undefined { return this.source(ticket)?.channel ?? ticket.channels[0] }
+  /** The host's completion reply for a ticket's latest ready or dropped report, while it is the one that went out. */
+  private completed(ticket: Ticket): string | undefined {
+    if (!this.policy().replies.completion) return undefined
+    const report = latestReport(ticket)
+    if (report?.state !== 'ready' && report?.state !== 'dropped') return undefined
+    const id = key('result', ticket.id, report.at)
+    return this.options.outbox.status(id) ? id : undefined
+  }
+  /**
+   * The conversation a ticket answers in: its origin Trigger's Channel, else the Channel of the latest person's message
+   * attached to it (a ticket started from the dispatcher has no Channel of its own), else its first Channel.
+   */
+  private sourceChannel(ticket: Ticket): ChannelRef | undefined {
+    const source = this.source(ticket)?.channel
+    if (source) return source
+    const human = [...ticket.inputs].reverse().find(input => input.kind === 'trigger' && input.human && !input.context
+      && this.repo.triggers.get(input.triggerId)?.channel)
+    const attached = human?.kind === 'trigger' ? this.repo.triggers.get(human.triggerId)?.channel : undefined
+    return attached ?? ticket.channels[0]
+  }
 }
