@@ -50,6 +50,7 @@ import { mainTools, type MainToolsHost } from './tools/main.ts'
 import { SessionBus, type DshSessionControl } from '../sessions/bus.ts'
 import { executorTools, type ExecutorToolsHost } from './tools/executor.ts'
 import { reviewerTools } from './tools/reviewer.ts'
+import { WorkerRegistry } from '../workers.ts'
 
 // Source plugins interact with dsh-superagent exclusively through the `SourceHost` service interface.
 declare module '@deepseek-ai/cordis' { interface Context { orchestrator: SourceHost } }
@@ -66,6 +67,8 @@ export class Runtime extends Service implements SourceHost {
   readonly prompts: Prompts
   readonly effects: Effects
   readonly sources: SourceRegistry
+  /** Worker profiles plugins register; a Policy rule names one and those Tickets run its preset, tools and instructions. */
+  readonly workers = new WorkerRegistry()
   readonly commands: Commands
   readonly sessions: Sessions
   readonly settings: Settings
@@ -199,7 +202,7 @@ export class Runtime extends Service implements SourceHost {
         promptVersion: id => this.sessions.promptVersion(id), mayRead: (id, revision) => this.sessions.mayRead(id, revision),
         feishuPageSize: () => feishuSettings(sources).readPageSize, sourceLink: link }
       const sessions = this.sessions = new Sessions({ context: ctx, store, prompts, effects, health: board.claim('models'), masterId,
-        lifetime: this.lifetime,
+        lifetime: this.lifetime, workers: this.workers,
         closing: () => this.closing(), environment,
         tools: (agent, ticket, role) => role === 'reviewer' && ticket ? reviewerTools(this.toolHost, ticket)
           : ticket ? executorTools(this.toolHost, ticket) : mainTools(this.toolHost, agent) })
@@ -209,7 +212,7 @@ export class Runtime extends Service implements SourceHost {
       this.settings = new Settings({ store, sources, engine: { policyChanged }, health: board, context: ctx, lifetime: this.lifetime, sessions,
         sourceHost: this, setup, requestPass: () => { this.passes.request() } })
       this.executor = new DshExecutor({ context: ctx, get engine() { return runtime.engine }, store, effects, health: board.claim('worker'), machine,
-        lifetime: this.lifetime, sessions, closing: () => this.closing(), paused: () => this.paused(), environment, sourceLink: link,
+        lifetime: this.lifetime, sessions, workers: this.workers, closing: () => this.closing(), paused: () => this.paused(), environment, sourceLink: link,
         repliedTo: trigger => repliedTo({ store, sources }, trigger) })
       this.assessor = new MasterAssessor({ get engine() { return runtime.engine }, commands, get deployment() { return setup.deployment }, effects,
         settings: () => store.settings(), paused: () => this.paused(), threadContext: trigger => sources.threadContext(trigger),

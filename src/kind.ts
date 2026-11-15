@@ -41,6 +41,7 @@ export type {
   SourceInstance,
 } from './sources/kind.ts'
 export type { SourceHost, SourceContext } from './sources/host.ts'
+export type { WorkerProfile } from './workers.ts'
 
 /**
  * What the panel shows about an extension besides its registered kinds. A plugin may export `manifest` with these

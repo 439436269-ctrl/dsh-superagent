@@ -58,6 +58,16 @@ A worker can ask for an independent review before it reports ready. `orchestrato
 
 The reviewer receives the Ticket's requirements and the diff (cut at a length that keeps the message small), with the command that reads the rest, and answers with findings by severity and location, ending with a verdict. The tool call waits for that answer and returns it to the worker, naming a `review/<id>` resource for an answer too long for the tool result. A review that fails or times out leaves the worker free to report what it has: it holds no worker slot, records no Report and writes no Ticket state.
 
+### Worker profiles
+
+A plugin may register worker profiles on the `orchestrator` service (`ctx.orchestrator.workers.register`): an id, a DeepSeek Harness agent preset, additional tool names, a `match(trigger)` predicate that claims Tickets, a `workless` flag and system-prompt instructions. A Policy rule's `worker` field names one; the first matched rule in Policy order that names a worker wins. A matched rule that names no worker keeps the bundle worker, so the policy that routed the Ticket stays in charge. Only a Ticket with no matched rule runs the first profile, by id, whose `match` accepts its originating Trigger — for example a business Feishu `chatId`. Registration refuses person-facing and management tools (`ask_user_question`, `present`, `plugin_*`, market, scheduling, goals and workflows), so a profile may add work tools only.
+
+The Ticket records the selected profile id when it is accepted, and only a profile registered at that moment is selected. That Ticket's Session is created with the profile's agent preset, may use the profile's tools beside what that preset provides, and reads the profile's instructions after the team's sections and the Mandate's limits. A profile may also mark its Tickets `workless`, giving them an empty folder and skipping the prepare command, as a rule's `workspace: false` does.
+
+The profile's preset **replaces** the bundled worker preset, so it must be based on `dsh-superagent-worker` (or otherwise include the work tools and shell the Tickets need); a preset without `read` or the shell leaves those tools out. `tools` adds to that preset's tool set; the host still restricts the Session to the known work tools, while the report, reply and hand-back tools stay available.
+
+A rule that names a profile no plugin registered at acceptance, or a Ticket whose Trigger no profile claims, runs the bundled worker preset for its whole life. A plugin loaded later applies only to Tickets accepted afterwards, so install the plugin and its preset before creating Tickets.
+
 ### Concurrency
 
 A Ticket holds a worker slot from the start of a launch, including preparation, or from the delivery that wakes its idle Executor. It also holds the slot throughout an active turn.

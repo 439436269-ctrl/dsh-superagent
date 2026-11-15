@@ -15,6 +15,7 @@ The core is built around a contract, not around GitHub and Feishu. Evidence:
 | **One entry per kind** | `tsdown.config.ts`: `github-watch` 鈫?`src/sources/github.ts`, `feishu-watch` 鈫?`src/sources/feishu.ts`, `im-watch` 鈫?`src/sources/im.ts` | Each becomes its own bundle entry in `cordis.patch.yml`, enabled or disabled on its own |
 | **Any chat tool** | `docs/009-im-bridge.md` | An external process: a "bridge" speaks JSON lines on stdout and takes one JSON argument to send |
 | **Agent presets** | `cordis.patch.yml`: `dsh-superagent-worker-preset`, `dsh-superagent-router-preset` | A preset entry, replaceable without touching the plugin |
+| **Worker profiles** | `src/workers.ts`, `ctx.orchestrator.workers.register` | A plugin names a preset, additional work tools, a `match(trigger)` predicate, a workless flag and instructions; a Policy rule's `worker` field or the match selects it |
 | **Other agents as workers** | `orchestrator_agent_*` tools (`src/sessions/bus.ts`) | Any CLI whose non-interactive command is installed 鈥?codex, claude, gemini, opencode |
 | **Settings surfaces** | `src/app/views/settings.ts` builds `blocks` (policy/eval/executor) and `sources[]` from the registry | A kind supplies its own card, fields and policy rows |
 
