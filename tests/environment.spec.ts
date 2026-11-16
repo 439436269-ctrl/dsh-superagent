@@ -5,7 +5,7 @@ import { join } from 'node:path'
 import { promisify } from 'node:util'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { SENSITIVE_ENV_PATTERN, type SubprocessRuntime } from '@deepseek-ai/dsh-subprocess'
-import { GIT_LOCATION, agentVariables, credentialHelper, runAsWorker, verifyDirectory, withoutDirectory, workerBin, workerGitConfig, writeEnvironment }
+import { GIT_LOCATION, SHIM_HELPER_BODY, agentVariables, credentialHelper, runAsWorker, verifyDirectory, withoutDirectory, workerBin, workerGitConfig, writeEnvironment }
   from '../src/infra/environment.ts'
 import { CliError } from '../src/infra/commands.ts'
 import { testDeployment } from './fixtures/deployment.ts'
@@ -23,6 +23,11 @@ beforeEach(() => { dir = mkdtempSync(join(tmpdir(), 'environment-')); mkdirSync(
 afterEach(() => { rmSync(dir, { recursive: true, force: true }) })
 
 describe('worker shims', () => {
+  it('hide the console window of the command they run, which a GUI host cannot hide for them', () => {
+    // The shim runs as a GUI process and spawns its command with inherited stdio. Without windowsHide, Windows opens a
+    // console window for every `gh` or `lark-cli` call a worker makes; both spawn branches need the flag.
+    expect(SHIM_HELPER_BODY.match(/windowsHide: true/g)).toHaveLength(2)
+  })
   it('run a wrapper that calls `gh` by name without reaching the shim again, and keep the caller\'s other PATH entries', async () => {
     program(join(dir, 'real', 'gh'), 'echo "{\\"login\\":\\"agent-bot\\",\\"config\\":\\"$GH_CONFIG_DIR\\",\\"path\\":\\"$PATH\\"}"')
     const wrapper = program(join(dir, 'gh-agent'), `GH_CONFIG_DIR=${dir}/agent-config exec gh "$@"`)

@@ -41,13 +41,15 @@ const env = { ...process.env, PATH: entries.join(';') }
 if (process.env.Path !== undefined) env.Path = env.PATH
 
 // A batch file has to go through cmd.exe; anything else is spawned with its argument vector intact.
+// windowsHide keeps the console window off the screen: this shim runs as a GUI process, which has no console to
+// inherit, so an inherited-stdio console command would otherwise open one every time a worker calls gh or lark-cli.
 const argv = [config.argv[0], ...config.argv.slice(1), ...forwarded]
 const quote = value => /[\\s"&|<>^()]/.test(value)
   ? '"' + value.replace(/(\\\\+)"/g, '$1$1\\\\"').replace(/(\\\\+)$/, '$1$1') + '"'
   : value
 const result = /\\.(cmd|bat)$/i.test(argv[0])
-  ? spawnSync(process.env.ComSpec ?? 'cmd.exe', ['/d', '/s', '/c', argv.map(quote).join(' ')], { stdio: 'inherit', env })
-  : spawnSync(argv[0], argv.slice(1), { stdio: 'inherit', env })
+  ? spawnSync(process.env.ComSpec ?? 'cmd.exe', ['/d', '/s', '/c', argv.map(quote).join(' ')], { stdio: 'inherit', env, windowsHide: true })
+  : spawnSync(argv[0], argv.slice(1), { stdio: 'inherit', env, windowsHide: true })
 process.exit(result.status ?? (result.error ? 1 : 0))
 `
 /**
