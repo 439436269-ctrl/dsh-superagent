@@ -45,7 +45,7 @@ $connected = $null; $broken = $null; $app = $null
 foreach ($entry in $logs) {
   $lines = Get-Content $entry.File -Tail 200
   $lastConnected = ($lines | Select-String -Pattern 'connected to wss://' | Select-Object -Last 1)
-  $lastBroken = ($lines | Select-String -Pattern 'connect failed|disconnected to wss://|Consumer disconnected|Bus exited|connection is closed|unexpected EOF' | Select-Object -Last 1)
+  $lastBroken = ($lines | Select-String -Pattern 'connect failed|disconnected to wss://|Bus exited|connection is closed|unexpected EOF' | Select-Object -Last 1)
   if (-not $lastConnected) { continue }
   $app = $entry.App; $connected = $lastConnected.LineNumber; $broken = if ($lastBroken) { $lastBroken.LineNumber } else { 0 }
   break
