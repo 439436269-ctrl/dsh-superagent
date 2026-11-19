@@ -40,3 +40,12 @@ it('keeps a message for a Source that is not installed waiting, and sends it onc
   await at(5000)
   expect([h.runtime.outbox.status('waiting'), sent.map(message => message.id)]).toEqual(['sent', ['waiting']])
 })
+
+it('refuses an over-long reply for a channel that caps the text while sending, so it is never queued', async () => {
+  const channel = { source: 'im', thread: 'im:1', address: { chat: '1', bridge: 'x' } }
+  expect(() => h.runtime.outbox.send({ id: 'long', channel, text: '字'.repeat(400), kind: 'reply' })).toThrow(/maximum is 100/)
+  expect(h.runtime.outbox.status('long')).toBeUndefined()
+  // A short reply on the same channel still goes through normally.
+  h.runtime.outbox.send({ id: 'short', channel, text: '已收到。', kind: 'reply' })
+  expect(h.runtime.outbox.status('short')).toBe('pending')
+})
