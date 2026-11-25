@@ -75,6 +75,19 @@ export function imTrigger(message: ImMessage, bridge: string, args: string[]): T
 
 const rest = async (ms: number, signal: AbortSignal): Promise<void> => { await delay(ms, undefined, { signal }).catch(() => { /* aborted */ }) }
 
+/**
+ * Turns a bridge failure into the one sentence a person can act on. A gateway that answers only inside the corporate network looks like a service
+ * fault from here, and "ENOTFOUND" reads as "the bot broke"; naming the network change is what makes the health entry useful.
+ */
+export function imFailureHint(message: string): string | undefined {
+  const host = /(?:ENOTFOUND|EAI_AGAIN|EAI_FAIL)\s+([a-z0-9.-]+\.[a-z]{2,})/i.exec(message)?.[1]
+    ?? /getaddrinfo[^\n]*?([a-z0-9-]+(?:\.[a-z0-9-]+)+)/i.exec(message)?.[1]
+  if (host) return `The bridge cannot resolve ${host}: that host answers only inside the corporate network (公司内网), so connect to it and the Source reconnects on its own; the deployment itself is fine.`
+  if (/ECONNREFUSED|ETIMEDOUT|EHOSTUNREACH|ENETUNREACH/i.test(message)) return 'The bridge cannot reach the gateway from this network; connect to the corporate network and the Source reconnects on its own.'
+  if (/SELF_SIGNED|UNABLE_TO_VERIFY|certificate/i.test(message)) return 'The gateway presented a certificate this machine does not trust; install the corporate root certificate instead of retrying.'
+  return undefined
+}
+
 /** Names the instance on a Trigger's Channel when it is not the kind's default one, so admission resolves that instance's chats. */
 const stampInstance = <T extends { id: string; channel?: { address: Record<string, string> }; meta?: Record<string, unknown> }>(trigger: T, instance: string): T =>
   instance === 'im' || !trigger.channel ? trigger
@@ -103,7 +116,10 @@ export async function runIm(ctx: SourceContext, signal: AbortSignal, instance = 
     } catch (error) {
       if (signal.aborted) return
       failures += 1
-      ctx.report('im', { state: 'error', detail: `The bridge failed: ${error instanceof Error ? error.message : String(error)}` })
+      const message = error instanceof Error ? error.message : String(error)
+      const hint = imFailureHint(message)
+      if (hint) console.error(`[im] ${instance} ${message.slice(0, 300)}`)
+      ctx.report('im', { state: 'error', detail: hint ?? `The bridge failed: ${message}` })
     }
     await rest(Math.min(30000, 1000 * 2 ** Math.min(failures, 5)), signal)
   }
