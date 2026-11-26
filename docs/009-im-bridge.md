@@ -165,7 +165,7 @@ it:
 - id: dsh-superagent-im
   name: dsh-superagent/im-watch
   config:
-    cli: node <REPOSITORY_DIR>/dsh-superagent-prototype/examples/im-bridges/dingtalk.mjs
+    cli: node <仓库目录>/examples/im-bridges/dingtalk.mjs
 ```
 
 The pure parts — signing, comparison, callback mapping — live in `dingtalk-core.mjs`, so `tests/dingtalk.spec.ts` can

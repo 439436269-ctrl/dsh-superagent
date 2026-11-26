@@ -209,7 +209,7 @@ thread = github:5
 | 发现 | issue #17 被列表轮询发现（`fetched=2`，另一条是 agent 自己开的 #10，被 `own` 正确跳过） |
 | 判定 | `accept`，理由「Explicit, fully specified one-word typo correction in a comment」 |
 | 工单 | `ticket.repository = "<owner>/<second-repo>"` |
-| worktree | `<REPOSITORY_DIR>\superagent-sandbox\<owner>\<second-repo>\fix-comment-typo-f133df157ac0` |
+| worktree | `<REPOSITORY_DIR>\<owner>\<second-repo>\fix-comment-typo-f133df157ac0` |
 | PR | `https://github.com/<owner>/<second-repo>/pull/18`，分支 `agent/fix-comment-typo-f133df157ac0`，改 `src/greet.js`，已合并 |
 | 回复 | issue #17 上一条 <你的账号> 评论 |
 
@@ -357,7 +357,7 @@ channelAllowed(channel) {
 
 ```
 issue #1 → accept → 工单 repository=dsh-crew-demo
-       → 自动克隆 <REPOSITORY_DIR>/superagent-sandbox/<owner>/dsh-crew-demo
+       → 自动克隆 <REPOSITORY_DIR>/<owner>/dsh-crew-demo
        → worktree fix-notes-typo-6214ad5d0ae2
        → PR #2「Fix NOTES.md typo: Instalation -> Installation」已合并
 ```

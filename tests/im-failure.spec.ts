@@ -3,8 +3,8 @@ import { expect, it } from 'vitest'
 import { imFailureHint } from '../src/sources/im-bridge.ts'
 
 it('names the network change when the gateway does not resolve', () => {
-  const hint = imFailureHint('[cause]: Error: getaddrinfo ENOTFOUND <内部网关域名>\n  at GetAddrInfoReqWrap.onlookupall')
-  expect(hint).toContain('<内部网关域名>')
+  const hint = imFailureHint('[cause]: Error: getaddrinfo ENOTFOUND vanish-claw.example.com\n  at GetAddrInfoReqWrap.onlookupall')
+  expect(hint).toContain('vanish-claw.example.com')
   expect(hint).toContain('corporate network')
   expect(hint).toContain('reconnects on its own')
 })
@@ -15,7 +15,7 @@ it('extracts the host from a plain getaddrinfo line', () => {
 })
 
 it('separates an unreachable gateway from a broken certificate', () => {
-  expect(imFailureHint('connect ECONNREFUSED <内网私有地址>:443')).toContain('cannot reach the gateway')
+  expect(imFailureHint('connect ECONNREFUSED 192.0.2.10:443')).toContain('cannot reach the gateway')
   expect(imFailureHint('Error: self signed certificate in certificate chain')).toContain('corporate root certificate')
 })
 

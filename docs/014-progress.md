@@ -4,10 +4,10 @@
 
 ## 仓库
 
-- 工作副本：`<REPOSITORY_DIR>\dsh-superagent-prototype`
+- 工作副本：`<工作副本目录>`
 - 远端：`https://github.com/<owner>/dsh-superagent`（main）
-- 推送需要 operator token：`git -c credential.helper= push "https://<owner>:$token@github.com/..."`（凭据管理器里那个 <你的账号> 会被拒）
-- 本地 git 身份：`vfvrpq <<you@example.com>>`
+- 推送需要 operator token（仓库写权限那个账号）；凭据管理器里的个人账号是只读的，会被拒
+- 本地 git 身份：`<你的账号> <you@example.com>`
 
 ## 这一轮做了什么（按时间）
 
@@ -56,12 +56,12 @@
 
 | 项 | 值 |
 |---|---|
-| 客户端编排器 | 端口每次启动变，探测方式见下；状态库 `<DSH_HOME>/.dsh/state/superagent` |
+| 客户端编排器 | 端口每次启动变，探测方式见下；状态库 `<DSH_HOME>/state/superagent` |
 | 开发实例 | 固定 3082，状态库 `.../state/superagent-dev`，`python scripts\dsh-superagent start/stop/status` |
 | 探测编排器 | 遍历监听端口 GET `http://127.0.0.1:<port>/orchestrator/api/state`，header `x-orchestrator-request: 1` |
 | **禁止** | 在客户端跑着时启动独立服务会抢锁；面板/接口改配置优先，别直接写 sqlite |
 | 面板 | 侧栏 **Superagent** → tab：概览/来源/触发/评估/执行/**调度者**/设置 |
-| 浏览器验证 | Chrome `<DSH_HOME>\AppData\Local\Google\Chrome\Application\chrome.exe`，playwright-core 在 `~/.dsh-browser/node_modules` |
+| 浏览器验证 | Chrome `%LOCALAPPDATA%\Google\Chrome\Application\chrome.exe`，playwright-core 在 `~/.dsh-browser/node_modules` |
 | 面板选择器 | 侧栏按钮文本 `Superagent`；tab 用 `getByRole('tab', {name:'调度者'})`；输入框 `[data-composer-input]`；发送 `button.uV2eYG_primary` 或 Enter |
 
 ## 踩过的坑（别再踩）
@@ -141,7 +141,7 @@ github-stream:…<second-repo>:issues       since 14:36:02（第二仓）
 1. 在 `pollRepository` 入口记一次 KV（`github-poll:<repository>` = 时间戳），确认轮询是否真的按周期执行
 2. 记录 `readStream` 的 HTTP 状态码（200/304）与返回条数
 3. 若确认轮询在跑但接口一直 304，检查 `conditional`（`If-None-Match`）与 `since` 的配合是否让 GitHub 复用了旧 etag
-4. 万不得已：重置 `<DSH_HOME>/.dsh/state/superagent-dev`（开发沙箱，无真实数据），从干净状态重跑
+4. 万不得已：重置 `<DSH_HOME>/state/superagent-dev`（开发沙箱，无真实数据），从干净状态重跑
 
 ## 2026-11-08 23:30：多仓闭环
 
@@ -218,7 +218,7 @@ github-stream:…<second-repo>:issues       since 14:36:02（第二仓）
 | 监听仓干活 | issue/PR 轮询 | `dsh-crew-demo` 全链路，PR #2 已合并 |
 | 非监听仓派活 | `orchestrator_dispatch(repository, request)` | 单测证明准入通过（`dispatch-admission.spec.ts`） |
 | 无仓库先本地干 | `orchestrator_dispatch(request)` | 目录 `<root>/local/<name>`，未实测 |
-| 新建仓库 | `orchestrator_repo_create(name)` | 默认 owner `<owner>`，未实测 |
+| 新建仓库 | `orchestrator_repo_create(name)` | 默认 owner `<部署仓 owner>`，未实测 |
 
 未完成的实测（需要人操作，我这边没有入口）：
 
