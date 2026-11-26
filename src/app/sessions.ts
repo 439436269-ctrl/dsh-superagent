@@ -160,6 +160,9 @@ export class Sessions {
     const ctx = this.ctx
     const ticket = role === 'orchestrator' ? undefined : this.host.store.tickets.get((role === 'worker' ? ticketOfSession(id)
       : ticketOfReviewSession(id)) ?? '')
+    // A Ticket Session archived for inactivity is restored when the Ticket runs again; the archive gate would otherwise
+    // block every step of the resumed Session.
+    if (role !== 'orchestrator') await this.unarchive(id)
     let result = await ctx.sessionController.resolveAgent(id as SessionId)
     if ('error' in result && result.error.code === 'session/not-found') {
       const workspace = await ctx.workspaceRegistry.create(cwd)
@@ -181,6 +184,13 @@ export class Sessions {
     ctx.permissionPresets.set(result.agent.session, 'danger-full-access')
     await ctx.sessionController.rename({ sessionId: id as SessionId, title })
     return result.agent
+  }
+  /** Restores a worker or reviewer Session archived for inactivity before its Ticket runs again. */
+  private async unarchive(sessionId: string): Promise<void> {
+    const registry = this.ctx.get('workspaceRegistry') as
+      { archivedSessionIds?: readonly SessionId[]; unarchiveSession?: (id: SessionId) => Promise<void> } | undefined
+    if (!registry?.archivedSessionIds?.includes(sessionId as SessionId) || typeof registry.unarchiveSession !== 'function') return
+    await registry.unarchiveSession(sessionId as SessionId)
   }
   /** Returns whether `sessionId` already holds the message delivered under `requestId`, or `false` if the session does not exist. */
   async holds(sessionId: string, requestId: string): Promise<boolean> {
