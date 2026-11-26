@@ -17,6 +17,7 @@ import type { DshExecutor } from '../executor/dsh.ts'
 import type { Health } from '../sources/host.ts'
 import type { SourceRegistry } from '../sources/registry.ts'
 import type { Sessions } from './sessions.ts'
+import type { SessionArchiveReport } from './archive-sessions.ts'
 import type { Store } from './store.ts'
 import type { TextCache } from './cache.ts'
 import type { LinkTarget, ViewHost } from './views/records.ts'
@@ -37,6 +38,8 @@ export interface HttpHost {
   restartSoon(delayMs?: number): void
   /** Sessions this Host can name as the dispatcher. */
   sessionsList(): Promise<{ id: string; running: boolean; cwd: string }[]>
+  /** Lists, and unless the request is a dry run archives, worker and reviewer Sessions idle past the retention window. */
+  archiveSessions(request: { days?: number; dryRun?: boolean }): Promise<SessionArchiveReport>
   readonly store: Store
   /** Feishu message links resolved since startup, used by search to match AppLink URLs. */
   readonly sourceLinks: Pick<TextCache, 'entries'>
@@ -155,6 +158,7 @@ const PromptsQuery = z.object({ revision: count.optional(), offset: count.defaul
 const SourceBlock = z.templateLiteral(['source:', z.string().regex(/^[a-z][a-z0-9-]*$/)])
 const SettingsBlockSchema = z.union([z.enum(['policy', 'eval', 'executor']), SourceBlock])
 const SaveRequest = z.object({ value: z.unknown(), revision: z.number().int().nonnegative() })
+const ArchiveRequest = z.object({ days: z.number().int().min(1).max(3650).optional(), dryRun: z.boolean().optional() }).default({})
 
 function routes(runtime: HttpHost): Routes {
   const { store } = runtime
@@ -204,6 +208,7 @@ function routes(runtime: HttpHost): Routes {
     'POST tickets/:id/retry': ({ params }) => { const id = ticket(params.id); runtime.engine.retryTicket(id); return { retried: true } },
     'POST tickets/:id/stop': ({ params }) => { const id = ticket(params.id); runtime.engine.stopTicket(id); return { stopped: true } },
     'POST executor/pause': async ({ body }) => runtime.settings.pause(z.object({ paused: z.boolean() }).parse(await body()).paused, 'panel'),
+    'POST sessions/archive': async ({ body }) => runtime.archiveSessions(ArchiveRequest.parse(await body())),
     'PUT settings/:block': async ({ params, body }) => {
       const block = SettingsBlockSchema.parse(params.block)
       const request = SaveRequest.parse(await body())

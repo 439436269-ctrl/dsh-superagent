@@ -347,6 +347,9 @@ const ROUTES: { [K in keyof Api]: Route<K> } = {
     server.revisions.pause = (server.revisions.pause ?? 0) + 1
     return { paused: body.paused }
   } },
+  'POST sessions/archive': { body: true, answer: ({ body }) => ({ available: true, days: body.days ?? 7, dryRun: body.dryRun ?? true,
+    at: '2026-01-01T00:00:00.000Z', scanned: 0, candidates: [], createdFallback: 0, archived: [],
+    skipped: { archived: 0, recent: 0, liveTicket: 0, active: [] }, failed: [] }) },
   'PUT settings/:block': { body: true, answer: ({ params: { block }, body }) => {
     const source = block.startsWith('source:') ? KINDS.find(kind => `source:${kind.kind}` === block) : undefined
     if (!['policy', 'eval', 'executor', 'replies'].includes(block) && !source) return block.startsWith('source:') ? refuse(404, 'Source not found')

@@ -44,6 +44,7 @@ import { health, type Health, type SourceContext, type SourceHost } from '../sou
 import { sessionTrigger, setSessionDeliver } from '../sources/session.ts'
 import { Sessions } from './sessions.ts'
 import { Settings } from './settings.ts'
+import { ARCHIVE_AFTER_DAYS, ARCHIVE_INTERVAL_MS, SessionArchiver, dshHome, type SessionArchiveReport } from './archive-sessions.ts'
 import { sourceContextOf, type SourceContextDeps } from './source-context.ts'
 import type { ResourceHost } from './resources.ts'
 import { mainTools, type MainToolsHost } from './tools/main.ts'
@@ -71,6 +72,8 @@ export class Runtime extends Service implements SourceHost {
   readonly workers = new WorkerRegistry()
   readonly commands: Commands
   readonly sessions: Sessions
+  /** Archives worker and reviewer Sessions idle past the retention window, through the Host's durable archive set. */
+  readonly archive: SessionArchiver
   readonly settings: Settings
   readonly executor: DshExecutor
   readonly reviewer: Reviewer
@@ -86,6 +89,7 @@ export class Runtime extends Service implements SourceHost {
   private readonly stopped = new AbortController()
   private readonly disposers: (() => void)[] = []
   private releaseLock?: () => Promise<void>
+  private archiveTimer?: ReturnType<typeof setInterval>
   private closingFlag = false
   private stopping?: Promise<void>
   private readonly sourceDeps: SourceContextDeps
@@ -170,6 +174,7 @@ export class Runtime extends Service implements SourceHost {
     try {
       const report = (error: unknown) => { ctx.logger.warn('dsh-superagent: %s', String(error)) }
       const store = opened = this.store = new Store(join(machine.stateDir, 'orchestrator.sqlite'), report)
+      this.archive = new SessionArchiver({ context: ctx, store: this.store, sessionsRoot: join(dshHome(), 'sessions') })
       const setup = this.setup = new Setup({ context: ctx, machine, lifetime: this.lifetime, restart })
       const deployed = () => setup.configured()
         ? environmentOf({ deployment: setup.deployment, sources: this.sources, settings: store.settings(), stateDir: machine.stateDir }) : undefined
@@ -323,7 +328,23 @@ export class Runtime extends Service implements SourceHost {
     this.executor.resume()
     this.passes.start()
     this.effects.start()
+    this.scheduleArchive()
     this.runtimeHealth.set({ state: 'ready', detail: 'Orchestrator is ready', at: now() })
+  }
+  /** Runs an archive pass now and then periodically; a Host without the durable archive set is left alone. */
+  private scheduleArchive(): void {
+    this.sweepSessions()
+    this.archiveTimer = setInterval(() => { if (!this.closing()) this.sweepSessions() }, ARCHIVE_INTERVAL_MS)
+  }
+  /** One archive pass over idle worker and reviewer Sessions; failures are logged and never interrupt the Host. */
+  private sweepSessions(): void {
+    void this.archive.run({ days: ARCHIVE_AFTER_DAYS, dryRun: false }, this.stopped.signal).then(report => {
+      if (!report.available || report.archived.length === 0) return
+      this.ctx.logger.info('dsh-superagent archived %d stale worker/reviewer Session(s)', report.archived.length)
+    }, (error: unknown) => {
+      if (this.closing() || this.stopped.signal.aborted) return
+      this.ctx.logger.warn('dsh-superagent could not archive stale Sessions: %s', String(error))
+    })
   }
   private httpHost(): HttpHost {
     const runtime = this
@@ -332,12 +353,14 @@ export class Runtime extends Service implements SourceHost {
       get deployment() { return setup.deployment },
       get setupProblem() { return setup.problem }, get feishuProblem() { return setup.feishuProblem },
       configured: () => setup.configured(), links: () => runtime.links(), ticketEnvironment: ticket => runtime.ticketEnvironment(ticket),
-      checkSetup: () => { setup.check() }, requestPass: () => { passes.request() }, models: () => this.ctx.sessionController.modelCatalog(), restartSoon: (delayMs?: number) => this.restartSoon(delayMs), dispatcher: () => this.dispatcher(), setDispatcher: (id: string | null) => this.setDispatcher(id), sessionsList: () => this.dispatcherSessions() }
+      checkSetup: () => { setup.check() }, requestPass: () => { passes.request() }, models: () => this.ctx.sessionController.modelCatalog(), restartSoon: (delayMs?: number) => this.restartSoon(delayMs), dispatcher: () => this.dispatcher(), setDispatcher: (id: string | null) => this.setDispatcher(id), sessionsList: () => this.dispatcherSessions(),
+      archiveSessions: (request: { days?: number; dryRun?: boolean }): Promise<SessionArchiveReport> => this.archive.run(request) }
   }
   /** Idempotent stop; concurrent or repeated calls share the same shutdown promise. */
   stop(): Promise<void> { return this.stopping ??= this.shutdown() }
   private async shutdown(): Promise<void> {
     this.closingFlag = true; const passes = this.passes.stop(); this.stopped.abort()
+    clearInterval(this.archiveTimer)
     try {
       this.assessor.stop()
       const ids = [this.masterId, ...this.store.tickets.list().map(ticket => workerSessionId(ticket.id))]

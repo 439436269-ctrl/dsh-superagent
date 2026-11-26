@@ -140,6 +140,23 @@ Check dsh-superagent: run `scripts/dsh-superagent --profile superagent status` i
 
 `--respect-stop` preserves an intentional stop. Only `stop` writes the marker; `start` clears it. `restart` writes no marker, so the check can recover a restart whose shutdown timed out.
 
+### Session retention
+
+Worker and reviewer Sessions are long transcripts, so an idle one is archived instead of staying in the Session list forever. A pass runs at startup and every six hours: it archives `worker-<ticket>` and `reviewer-<ticket>` Sessions whose newest transcript — or creation time, when there is none — is older than seven days.
+
+Archiving is DeepSeek Harness's own archive set: the Session id is recorded durably, the Session leaves the Session list, its next model step is blocked, and every transcript file stays on disk. The pass never deletes or moves a file and never stops a running Session: a Session that reports activity is refused and retried on the next pass, and one whose Ticket is still live is left alone. When an archived worker or reviewer Session belongs to a Ticket that runs again, dsh-superagent restores it before the next turn, so the archive gate cannot block resumed work.
+
+The archive set belongs to the DSH home, not to one deployment. A home shared by more than one dsh-superagent state directory is therefore scanned as a whole: an idle worker or reviewer Session whose Ticket is not in this state directory is treated as orphaned and archived too. An active one is still refused.
+
+To list or apply the same pass by hand, from the checkout (a dry run unless `--apply`):
+
+```sh
+node scripts/archive-sessions.mjs --url http://127.0.0.1:<port>
+node scripts/archive-sessions.mjs --url http://127.0.0.1:<port> --apply
+```
+
+The script calls the management route `POST sessions/archive` with `{"days": 7, "dryRun": true}`; `dryRun` defaults to true. Without `--url` it reads `DSH_SUPERAGENT_URL`, then `DSH_WEB_URL`, then `http://127.0.0.1:3082`, so a script run from a DSH Shell needs no address. It prints each candidate's Session, role, Ticket, last activity and age. Restore an archived Session with DeepSeek Harness's own unarchive action.
+
 ## Settings
 
 Setup must succeed before polling or work starts. Overview lists missing requirements and links to their settings. A settings change runs setup again. If you fix something outside the application, such as CLI authentication, choose **Check again**.
