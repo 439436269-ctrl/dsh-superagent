@@ -85,6 +85,8 @@ export interface Outbox {
   status(id: string): ReplyStatus | undefined
   /** Withdraw a message that has not gone out. */
   withdraw(id: string): void
+  /** Texts already delivered to one conversation for one ticket, so a later message need not restate them. */
+  sentTexts?(ticketId: string, thread: string): string[]
 }
 
 /** What the Engine reports after a change, by event type. */

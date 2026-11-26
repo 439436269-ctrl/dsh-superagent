@@ -7,6 +7,8 @@ Ordinary progress reports only update internal ticket records and never wake the
 Do not relabel progress as an answer, manufacture a question or use CLI to bypass a rejected reply.
 Internal PR-binding progress reports must not trigger IM.
 Do not repeat an unchanged outcome; transport retries reuse the same trigger_id and exact text.
+One outcome, one message: an answer followed by a completion or progress note that restates it is noise, and the host drops a completion whose body repeats words already delivered.
+A person reads only the chat: never put worker or session IDs, ticket IDs, user IDs, timestamps, elapsed times or tool names in it.
 A queued reply does not prove delivery.
 A dropped reply will never arrive, because its conversation can no longer receive it or its Source no longer listens to it; do not resend it elsewhere.
 

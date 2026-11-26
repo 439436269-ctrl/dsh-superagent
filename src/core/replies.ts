@@ -24,6 +24,20 @@ const ENDED = '已结束'
 /** How much of a title a host-written reply keeps, so the IM word limit has room beside it. */
 const TITLE_CHARS = 80
 export const shortTitle = (title: string): string => title.length > TITLE_CHARS ? `${title.slice(0, TITLE_CHARS).trimEnd()}…` : title
+/** Collapses whitespace so two renderings of the same sentence compare equal. */
+const squash = (text: string): string => text.replace(/\s+/g, ' ').trim()
+/**
+ * Whether a message only restates something this conversation already carries: equal after whitespace, or — for a message
+ * long enough to be a real answer — one that contains an earlier message whole. Short greetings stay sendable.
+ */
+export function restatesEarlier(text: string, earlier: readonly string[]): boolean {
+  const target = squash(text)
+  if (!target) return false
+  return earlier.some(item => {
+    const other = squash(item)
+    return other.length > 0 && (other === target || (target.length >= 60 && target.includes(other)))
+  })
+}
 
 /**
  * Replies writes the Engine's messages to Channels through the Outbox port: an acknowledgement, the answer to a person's
@@ -66,7 +80,13 @@ export class Replies extends EnginePart {
     const channel = this.sourceChannel(ticket)
     if (!channel) return
     const text = message?.trim() || `${state === 'dropped' ? ENDED : COMPLETE}：${shortTitle(ticket.title)}`
+    // The worker often writes the finished answer in chat and reports the same words: a completion that restates them is noise.
+    if (message && this.repeats(ticket.id, channel.thread, message)) return
     this.options.outbox.send({ id: key('result', ticket.id, at), channel, text, kind: 'reply', ticketId: ticket.id })
+  }
+  /** Whether this conversation already carries that text for the ticket, so a completion would only repeat it. */
+  private repeats(ticketId: string, thread: string, text: string): boolean {
+    return restatesEarlier(text, this.options.outbox.sentTexts?.(ticketId, thread) ?? [])
   }
   /** Withdraw a ticket's question for a person from the outbox, unless it went out already. */
   withdrawAttention(attentionId: string): void { this.options.outbox.withdraw(key('attention-reply', attentionId)) }

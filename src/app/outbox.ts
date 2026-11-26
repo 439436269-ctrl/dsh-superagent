@@ -34,6 +34,8 @@ export class Outbox implements OutboxPort {
     store.atomic(() => { if (store.receipts.add(message)) effects.enqueue('reply', message.id, {}) })
   }
   status(id: string): ReplyStatus | undefined { return this.host.store.receipts.get(id)?.status }
+  /** Texts already delivered to one conversation for one ticket, so a later message need not restate them. */
+  sentTexts(ticketId: string, thread: string): string[] { return this.host.store.receipts.sentTexts(ticketId, thread) }
   withdraw(id: string): void {
     const { store, effects } = this.host
     store.atomic(() => { if (store.receipts.withdraw(id)) effects.cancel('reply', id) })
