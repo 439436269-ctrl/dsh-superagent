@@ -239,12 +239,13 @@ export async function startRuntime(seed?: (store: Store) => void) {
     inspect: vi.fn(async () => ({ events: [] })),
   }
   const reader = { read: async () => ({ events: [] }), [Symbol.asyncDispose]: async () => {} }
-  const persistence = { flush: vi.fn(async () => {}), open: vi.fn(async () => reader) }
+  const persistence = { flush: vi.fn(async () => {}), open: vi.fn(async () => reader), list: vi.fn(async () => []) }
   const webServer = { host: '127.0.0.1', port: 3082, register: (route: { handler: HttpHandler }) => { http = route.handler; return () => {} } }
   const jobs = jobRegistry(id => agents.get(id))
   const subagents = subagentRuntime(agents)
   const services = { agents, llm: { resolveCallConfig: vi.fn(async (value: unknown) => value) }, sessionController: controller,
-    sessionPersistence: persistence, workspaceRegistry: { create: async (cwd: string) => ({ id: cwd }) }, permissionPresets: { set: () => {} }, subprocess, webServer,
+    sessionPersistence: persistence, workspaceRegistry: { create: async (cwd: string) => ({ id: cwd }), archivedSessionIds: [] as string[],
+      archiveSession: vi.fn(async () => {}), unarchiveSession: vi.fn(async () => {}) }, permissionPresets: { set: () => {} }, subprocess, webServer,
     jobs: jobs.service, subagents: subagents.service }
   const ctx = new Context()
   for (const [name, service] of Object.entries(services)) ctx.reflect.provide(name, service)
