@@ -423,6 +423,7 @@ Some generic modules still refer directly to GitHub or Feishu:
 | `tests/background.spec.ts` | Waiting for a worker's shell jobs and subagents: an end that woke it, and a host that stops |
 | `tests/bundle-patch.spec.ts` | The bundle's patch, read as DeepSeek Harness reads it, and the agent presets of Executor, reviewer and main Sessions it defines |
 | `tests/review.spec.ts` | The reviewer Session on a running Runtime: its preset and tools, the request it reads, the findings returned to the worker, and a long answer's resource |
+| `tests/archive-sessions.spec.ts` | Stale worker and reviewer Sessions by transcript time, a dry run, a live Ticket and an active Session left alone, the management route, and the unarchive a resumed Ticket needs |
 | `tests/workers.spec.ts` | Worker profiles: registration, the Rule field, the preset, tools and instructions a Ticket runs under, and the fallback when the plugin is not loaded |
 | `tests/effects.spec.ts` | The effect queue: coalescing, limits, retries with backoff, health and shutdown |
 | `tests/passes.spec.ts` | Passes: one at a time, the ones asked for during a pass run as one after it, and the runtime health a failed pass reports |
